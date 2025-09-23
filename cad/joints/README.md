@@ -1,31 +1,32 @@
 # frc114-harmonic-drive
 
 [![License: CERN-OHL-S-2.0](https://img.shields.io/badge/License-CERN--OHL--S--2.0-blue.svg)](./LICENSE)
-[**🔎 Search models**](#old-docs-server-removed) · [**📘 Docs**](#old-docs-server-removed) · [中文 / Chinese](./README.zh-CN.md)
+[**🔎 Search models**](#old-docs-server-removed) · [**📘 Docs**](#old-docs-server-removed) · [中文 Chinese](./README.zh-CN.md)
 
-> Built for FRC robotics: a modular library of **harmonic reducers**, motor-board **adapters**, and **universal joints** (vertical/parallel).  
+> Built for FRC robotics: a modular library of **harmonic reducers**, motor-board **adapters**, and **universal joints** (vertical).  
 > Repository accepts **`.step` only** (mm, Z↑).
 
+<!-- TOP: Real photo (left) + joint main render (right) -->
 <p align="center">
-  <img src="docs/design_reference/D25-MotorBoardAdapter_front-example.png" width="45%" alt="D25 adapter - front"/>
-  <img src="docs/design_reference/D25-MotorBoardAdapter_back-example.png"  width="45%" alt="D25 adapter - back"/>
+  <img src="docs/real-pictures/real-joint-D25_vertical_top.png" width="49%" alt="Real assembly - D25 vertical (top view)"/>
+  <img src="docs/design-example/pictures/joint-D25_vertical_main.png" width="49%" alt="D25 vertical joint - main render"/>
 </p>
 
 ---
 
 ## Why this repo
 
-- **Single interface per model** (e.g., **D25**): every adapter ↔ every joint mate through the same **AJI (Adapter–Joint Interface)**.  
+- **Single interface per model** (e.g., **D25**): every adapter ↔ every joint mates through the same **AJI (Adapter–Joint Interface)**.  
 - **Swap-friendly**: change motors or joints **without** re-drawing the opposite side.  
 - **Consistent exports**: only `.step` files to maximize CAD interoperability.
 
 ---
 
-## Quick search
+## Quick search (current contents)
 
-- Series: [D17](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2F+D17&type=code) · [D20](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2F+D20&type=code) · [D25](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2F+D25&type=code) · [D32](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2F+D32&type=code) · [J32](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2F+J32&type=code)  
-- Motors: [NEOVERTEX](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2Fadapters+NEOVERTEX&type=code) · [NEO](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2Fadapters+NEO&type=code) · [KRAKENX60](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2Fadapters+KRAKENX60&type=code) · [FALCON500](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2Fadapters+FALCON500&type=code)
-- Joints: [vertical](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2Fjoints%2Fvertical+vertical&type=code) · [parallel](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2Fjoints%2Fparallel+parallel&type=code)
+- Series: [D17](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2F+D17&type=code) · [D20](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2F+D20&type=code) · [D25](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2F+D25&type=code) · [J32](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2F+J32&type=code)  
+- Motors: [NEOVERTEX](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2Fadapters+NEOVERTEX&type=code) · [KRAKENX60](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2Fadapters+KRAKENX60&type=code)  
+- Joints: [vertical (all)](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2Fjoints+vertical&type=code) · [D25-vertical only](https://github.com/OAK-WJR/frc114-harmonic-drive/search?q=path%3Amechanical%2Fjoints+%22D25-vertical%22&type=code)
 
 > Need a **real input box** with filters? Use the **Search page** → #old-docs-server-removed
 
@@ -33,19 +34,19 @@
 
 ## What’s inside
 
-```
 mechanical/
-  base_reducers/                # reducers only (.step)
-  adapters/                     # <Series><Frame>/<Series><Frame>-<MOTOR>-<vN>[-<Mount>].step
-  joints/                       # vertical|parallel/<Series><Frame>-<type>.step
+base_reducers/ # reducers only (.step)
+adapters/ # <Series><Frame>/<Series><Frame>-<MOTOR>-<vN>[-<Mount>].step
+joints/ # <Series><Frame>-vertical.step
 docs/
-  design_reference/             # AJI example step + images (front/back)
-  usage.md                      # full modeling & naming rules
+design-example/
+D25-MotorBoardAdapter_example-design_reference.step
+pictures/ # images used in this README
+real-pictures/ # real assembly shots
 LICENSE
-```
 
-**Supported models**: `D17 · D20 · D25 · D32 · J32`  
-**Example**: `mechanical/joints/vertical/D25-vertical.step`
+**Supported models (now)**: `D17 · D20 · D25 · J32`  
+**Example**: `mechanical/joints/D25-vertical.step`
 
 ---
 
@@ -53,37 +54,33 @@ LICENSE
 
 - **Reducers**: `<Series><Frame>[-<Ratio>].step` → `D25-24.step`, `J32.step`  
 - **Adapters**: `adapters/<Series><Frame>/<Series><Frame>-<MOTOR>-<vN>[-<Mount>].step`  
-  - `MOTOR` in UPPERCASE: `NEOVERTEX | NEO | KRAKENX60 | FALCON500 | 775PRO`  
+  - `MOTOR` in UPPERCASE recommended: `NEOVERTEX | KRAKENX60 | ...`  
   - `vN`: `v1/v2/v5...`; `Mount` (optional): `P | NT | NF`  
-- **Joints**: `joints/<type>/<Series><Frame>-<type>.step` (type = `vertical | parallel`)
+  - *Note*: legacy files may contain mixed-case names; they’ll be normalized over time.  
+- **Joints**: `joints/<Series><Frame>-vertical.step`
 
 Full rules → **Docs**: #old-docs-server-removed
 
 ---
 
-## AJI (Adapter–Joint Interface)
+## Contributing / Requirements
 
-Each model defines **one** AJI. Required fields:  
-`pilot_d`, `pilot_depth`, `bcd_d`, `holes_n`, `hole_d`, `face_thk`, `datum` (+ optional envelope `OD/ID/length`).  
-Hard requirements: **same‑model fit‑all** · **only via AJI** · **hot‑swap motor/joint**.  
-Reference files → `docs/design_reference/`.
-
----
-
-## Contributing
-
-1. export **`.step`** (mm, Z↑).  
-2. Follow naming & folder layout.  
-3. Verify AJI fit with **all** opposite‑side parts of the same model.  
+1. Export **`.step`** only (mm, Z↑).  
+2. Follow naming & folder layout above.  
+3. Verify AJI fit with **all** opposite-side parts of the same model.  
 4. (Optional) update `config/variants.csv`.  
 5. Submit PR with 1–2 screenshots.
+
+<!-- BOTTOM: design references side-by-side -->
+<p align="center">
+  <img src="docs/design-example/pictures/D25-MotorBoardAdapter_back-design_reference.png" width="49%" alt="D25 adapter - back (blue: AJI frozen)"/>
+  <img src="docs/design-example/pictures/D25-MotorBoardAdapter_front-design_reference.png" width="49%" alt="D25 adapter - front view"/>
+</p>
+<p align="center"><i>Blue area = AJI mating & datum zone (FROZEN · do not modify).</i></p>
 
 ---
 
 ## License & attribution
 
-© 2025 Jiarui Wu — Licensed under **CERN‑OHL‑S v2.0** (see `LICENSE`).  
+© 2025 Jiarui Wu — Licensed under **CERN-OHL-S v2.0** (see `LICENSE`).  
 Vendor “reference-only” models are **not** redistributed; use vendor links locally.
-
-
-
