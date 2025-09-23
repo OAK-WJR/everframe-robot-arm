@@ -72,7 +72,7 @@ Reference files → `docs/design_reference/`.
 
 ## Contributing
 
-1. Onshape → export **`.step`** (mm, Z↑).  
+1. export **`.step`** (mm, Z↑).  
 2. Follow naming & folder layout.  
 3. Verify AJI fit with **all** opposite‑side parts of the same model.  
 4. (Optional) update `config/variants.csv`.  
@@ -84,5 +84,6 @@ Reference files → `docs/design_reference/`.
 
 © 2025 Jiarui Wu — Licensed under **CERN‑OHL‑S v2.0** (see `LICENSE`).  
 Vendor “reference-only” models are **not** redistributed; use vendor links locally.
+
 
 
