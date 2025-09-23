@@ -3,7 +3,7 @@
 [![License: CERN-OHL-S-2.0](https://img.shields.io/badge/License-CERN--OHL--S--2.0-blue.svg)](./LICENSE)
 [**🔎 Search models**](#old-docs-server-removed) · [**📘 Docs**](#old-docs-server-removed) · [中文 Chinese](./README.zh-CN.md)
 
-> Built for FRC robotics: a modular library of **harmonic reducers**, motor-board **adapters**, and **universal joints** (vertical).  
+> Built for FRC robotics: a modular library of **harmonic drive**, with frc motor **adapters**, and **universal joints**.  
 > Repository accepts **`.step` only** (mm, Z↑).
 
 <!-- TOP: Real photo (left) + joint main render (right) -->
@@ -84,3 +84,4 @@ Full rules → **Docs**: #old-docs-server-removed
 
 © 2025 Jiarui Wu — Licensed under **CERN-OHL-S v2.0** (see `LICENSE`).  
 Vendor “reference-only” models are **not** redistributed; use vendor links locally.
+
