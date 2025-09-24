@@ -13,9 +13,26 @@
 
 ---
 
+## Def
+
+ - **Adapter** = the **motor-side connection module**.
+  It includes the motor interface (mounting holes, pilot, flange) and ensures that a specific motor (NEO, Kraken, Falcon, etc.) can be mounted to the reducer. Some adapters may integrate the motor directly, or use a flange plate plus connector set.
+
+- **Joint** = the whole system of reduction, inculde support structures, harmonic reducers, Adapter, output...
+
+- **AJI (Adapter–Joint Interface)** = the **fixed interface standard** between adapter and joint.
+  Geometry is frozen (pilot, bolt circle, holes, thickness, datum, etc.), so every adapter in a series (e.g., D25) mates with every joint of the same series.
+
 ## Why this repo
 
-- **Single interface per model** (e.g., **D25**): every adapter ↔ every joint mates through the same **AJI (Adapter–Joint Interface)**.  
+- **Using harmonic drive** :
+  - No backlash **(Accuracy ≤ 1 arc-min = 0.0167° = 0.0002914 rad)**
+  - Light **(D Series All < 1kg, D17 Even 0.41kg)**
+  - Big Gear Ratio **(100 : 1)**
+  - Flexible Size **(Diameter: 8cm ~ 14.2cm, Depth: 1.85cm ~ 2.79cm)**
+  - Heavy load **(Average ~90Nm (can hold about 9kg at 1.0meter at most), biggest <892Nm (can hold 90.9kg at 1.0meter at most)**
+- **One interface per model**: For each reducer size (like D25), all adapters (the motor-mounting plates) and all joints (the universal connectors, vertical or parallel) are designed around the same Adapter–Joint Interface (AJI).
+This means any D25 adapter can mate with any D25 joint, without redesign.
 - **Swap-friendly**: change motors or joints **without** re-drawing the opposite side.  
 - **Consistent exports**: only `.step` files to maximize CAD interoperability.
 
@@ -85,4 +102,5 @@ Full rules → **Docs**: #old-docs-server-removed
 
 © 2025 Jiarui Wu — Licensed under **CERN-OHL-S v2.0** (see `LICENSE`).  
 Vendor “reference-only” models are **not** redistributed; use vendor links locally.
+
 
