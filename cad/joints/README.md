@@ -13,28 +13,34 @@
 
 ---
 
-## Def
+## Definitions
 
- - **Adapter** = the **motor-side connection module**.
-  It includes the motor interface (mounting holes, pilot, flange) and ensures that a specific motor (NEO, Kraken, Falcon, etc.) can be mounted to the reducer. Some adapters may integrate the motor directly, or use a flange plate plus connector set.
+- **Adapter** — the **motor-side connection module**.  
+  Provides the motor interface (mounting pattern, pilot, flange) so a specific motor (NEO, Kraken, Falcon, etc.) can mount to the reducer. An adapter may be a flange + connector set, or an **integrated module** that also includes the motor.
 
-- **Joint** = the whole system of reduction, inculde support structures, harmonic reducers, Adapter, output...
+- **Joint** — the **output-side connection module**.  
+  Links the reducer to the rest of the mechanism, offered in **vertical** (straight-through) or **parallel** (offset) orientations.
 
-- **AJI (Adapter–Joint Interface)** = the **fixed interface standard** between adapter and joint.
-  Geometry is frozen (pilot, bolt circle, holes, thickness, datum, etc.), so every adapter in a series (e.g., D25) mates with every joint of the same series.
+- **AJI (Adapter–Joint Interface)** — the **fixed interface standard** between adapters and joints.  
+  Geometry is **frozen** (pilot, bolt circle, hole size/count, face thickness, datum, etc.), so **every adapter in a series (e.g., D25) mates with every joint of the same series**. The frozen zone is shown in **blue** in the reference drawings.
+
+---
 
 ## Why this repo
 
-- **Using harmonic drive** :
-  - No backlash **(Accuracy ≤ 1 arc-min = 0.0167° = 0.0002914 rad)**
-  - Light **(D Series All < 1kg, D17 Even 0.41kg)**
-  - Big Gear Ratio **(100 : 1)**
-  - Flexible Size **(Diameter: 8cm ~ 14.2cm, Depth: 1.85cm ~ 2.79cm)**
-  - Heavy load **(Average ~90Nm (can hold about 9kg at 1.0meter at most), biggest <892Nm (can hold 90.9kg at 1.0meter at most)**
-- **One interface per model**: For each reducer size (like D25), all adapters (the motor-mounting plates) and all joints (the universal connectors, vertical or parallel) are designed around the same Adapter–Joint Interface (AJI).
-This means any D25 adapter can mate with any D25 joint, without redesign.
-- **Swap-friendly**: change motors or joints **without** re-drawing the opposite side.  
-- **Consistent exports**: only `.step` files to maximize CAD interoperability.
+- **Benefits of harmonic drives**
+  - **Zero/near-zero backlash** *(typical accuracy ≤ 1 arc-min ≈ 0.0167° ≈ 0.000291 rad)*  
+  - **Lightweight** *(all D-series < 1 kg; D17 as low as ~0.41 kg)*  
+  - **High ratios** *(e.g., 100:1)*  
+  - **Compact** *(Ø ~80–142 mm; depth ~18.5–27.9 mm)*  
+  - **High torque capacity** *(typical ~90 N·m ≈ 9 kg @ 1 m; some sizes up to ~892 N·m ≈ 90.9 kg @ 1 m)*
+
+- **One interface per model (AJI)**  
+  For each reducer size (e.g., **D25**), **all adapters** (motor-side modules) and **all joints** (output-side modules) share the **same AJI**.  
+  → You can swap a motor (**change adapter**) or swap the joint orientation (**change joint**) **without redesigning the other side**.
+
+- **Swap-friendly & consistent exports**  
+  Hot-swap motors/joints within a model series; export is standardized to **`.step`** for maximum CAD interoperability.
 
 ---
 
@@ -102,5 +108,6 @@ Full rules → **Docs**: #old-docs-server-removed
 
 © 2025 Jiarui Wu — Licensed under **CERN-OHL-S v2.0** (see `LICENSE`).  
 Vendor “reference-only” models are **not** redistributed; use vendor links locally.
+
 
 
