@@ -3,7 +3,7 @@
 [![License: CERN-OHL-S-2.0](https://img.shields.io/badge/License-CERN--OHL--S--2.0-blue.svg)](./LICENSE)
 [**🔎 Search (filename)**](https://github.com/OAK-WJR/frc114-harmonic-drive/find/main) · [**📘 Docs**](#old-docs-server-removed)
 
-> Built for FRC robotics: a modular library of **harmonic reducers**, motor-board **adapters**, and **universal joints** (vertical).  
+> Built for FRC robotics: a modular library of **harmonic reducers**, motor-side **adapters**, and **universal joints** (vertical).  
 > Repository accepts **`.step` only** (mm, Z↑). *(Legacy non-STEP files will be migrated.)*
 
 <p align="center">
@@ -88,13 +88,48 @@ Full rules → **Docs**: #old-docs-server-removed
 
 ---
 
+## Universal Joint Design Requirements
+> **Note**: interchangeability is **within the same series only** (e.g., D25 ↔ D25).  
+> Different series and frames (e.g. D17 vs. D20, D25 vs. J32) do **not** mate directly.
+**Goal**: joints must be **modular and hot-swappable** so you can change motors (adapter side) or joint orientation **without** redesign.
+- **AJI-compatible (frozen)**  
+  Use the series’ **AJI** exactly as defined (pilot, bolt-circle, holes, face thickness, datum). **Do not modify the blue “frozen” zone** in the reference drawings.
+- **Fits all adapters of the same series**  
+  A joint for **D25** must assemble with **every D25 adapter** (NEO/NEOVERTEX/KRAKEN… all versions).
+- **Must fit the reference adapter first**  
+  Validate against the reference adapter file before anything else:  
+  `docs/design-example/D25-MotorBoardAdapter_example-design_reference.step`
+- **Orientation variants**  
+  Joints come in **vertical** (straight-through) and **parallel** (offset). The AJI side is identical; only the output geometry changes.
+- **Keep it modular**  
+  No custom features on the AJI face. Reinforcements, cable channels, guards, etc. are allowed **outside** the frozen zone.
+- **Clearances & fasteners**  
+  Leave tool access for screws; respect min edge distance; avoid interference with typical motor housings and adapter bosses.
+- **Envelope (recommended)**  
+  Stay within a reasonable OD/height so different joints won’t collide with typical frames. Document any special clearance.
+- **Export**  
+  `.step` only (mm, Z↑).
+
+**Acceptance checklist**
+1) Mates with **reference adapter** (no interference).  
+2) Mates with **all adapters** in the same series.  
+3) Tool clearance OK; screws seat fully.  
+4) No geometry in the **frozen** AJI zone.  
+5) File name & path follow the **Naming** rules.
+
+---
+
 ## Contributing / Requirements
 
 1. Export **`.step`** only (mm, Z↑).  
-2. Follow naming & folder layout above.  
-3. Verify AJI fit with **all** opposite-side parts of the same model.  
-4. (Optional) update `config/variants.csv`.  
-5. Submit PR with 1–2 screenshots.
+2. Follow **Naming** & folder layout.  
+3. **AJI compliance**: do **not** change the blue frozen AJI zone.  
+4. **Universal joint-specific**:  
+   - Must fit the **reference adapter** of the same series.  
+   - Must fit **all adapters** of the same series (hot-swap guarantee).  
+   - Keep design **modular**; no custom features on the AJI face.  
+5. (Optional) update **`config/variants.csv`** (see below).  
+6. Submit PR with 1–2 screenshots (one assembly with an adapter).
 
 <p align="center">
   <img src="docs/design-example/pictures/D25-MotorBoardAdapter_back-design_reference.png" width="49%" alt="D25 adapter - back (blue: AJI frozen)"/>
@@ -108,6 +143,7 @@ Full rules → **Docs**: #old-docs-server-removed
 
 © 2025 Jiarui Wu — Licensed under **CERN-OHL-S v2.0** (see `LICENSE`).  
 Vendor “reference-only” models are **not** redistributed; use vendor links locally.
+
 
 
 
