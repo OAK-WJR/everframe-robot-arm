@@ -18,6 +18,7 @@ public class ArmSubsystem extends SubsystemBase {
               ? TunableJoint.ControllerType.MAX
               : TunableJoint.ControllerType.FLEX,
           ArmConstants.J1.CAN_ID,
+          ArmConstants.J1.INVERTED,
           ArmConstants.J1.GEAR_RATIO,
           ArmConstants.J1.MIN_DEG,
           ArmConstants.J1.MAX_DEG,
@@ -26,6 +27,12 @@ public class ArmSubsystem extends SubsystemBase {
               ArmConstants.J1Defaults.KV,
               ArmConstants.J1Defaults.KA,
               ArmConstants.J1Defaults.KG,
+              ArmConstants.J1Defaults.KG2,
+              ArmConstants.J1Defaults.KG2_OTHER_SCALE,
+              ArmConstants.J1Defaults.GLOBAL_OTHER_SCALE,
+              ArmConstants.J1Defaults.GOAL_MODE,
+              ArmConstants.J1Defaults.GOAL_OTHER_SCALE,
+              ArmConstants.J1Defaults.USE_GLOBAL_ANGLE_FOR_GRAVITY,
               ArmConstants.J1Defaults.KP,
               ArmConstants.J1Defaults.KI,
               ArmConstants.J1Defaults.KD,
@@ -43,6 +50,7 @@ public class ArmSubsystem extends SubsystemBase {
               ? TunableJoint.ControllerType.MAX
               : TunableJoint.ControllerType.FLEX,
           ArmConstants.J2.CAN_ID,
+          ArmConstants.J2.INVERTED,
           ArmConstants.J2.GEAR_RATIO,
           ArmConstants.J2.MIN_DEG,
           ArmConstants.J2.MAX_DEG,
@@ -51,6 +59,12 @@ public class ArmSubsystem extends SubsystemBase {
               ArmConstants.J2Defaults.KV,
               ArmConstants.J2Defaults.KA,
               ArmConstants.J2Defaults.KG,
+              ArmConstants.J2Defaults.KG2,
+              ArmConstants.J2Defaults.KG2_OTHER_SCALE,
+              ArmConstants.J2Defaults.GLOBAL_OTHER_SCALE,
+              ArmConstants.J2Defaults.GOAL_MODE,
+              ArmConstants.J2Defaults.GOAL_OTHER_SCALE,
+              ArmConstants.J2Defaults.USE_GLOBAL_ANGLE_FOR_GRAVITY,
               ArmConstants.J2Defaults.KP,
               ArmConstants.J2Defaults.KI,
               ArmConstants.J2Defaults.KD,
@@ -69,6 +83,7 @@ public class ArmSubsystem extends SubsystemBase {
                   ? TunableJoint.ControllerType.MAX
                   : TunableJoint.ControllerType.FLEX,
               ArmConstants.J3.CAN_ID,
+              ArmConstants.J3.INVERTED,
               ArmConstants.J3.GEAR_RATIO,
               ArmConstants.J3.MIN_DEG,
               ArmConstants.J3.MAX_DEG,
@@ -77,6 +92,12 @@ public class ArmSubsystem extends SubsystemBase {
                   ArmConstants.J3Defaults.KV,
                   ArmConstants.J3Defaults.KA,
                   ArmConstants.J3Defaults.KG,
+                  ArmConstants.J3Defaults.KG2,
+                  ArmConstants.J3Defaults.KG2_OTHER_SCALE,
+                  ArmConstants.J3Defaults.GLOBAL_OTHER_SCALE,
+                  ArmConstants.J3Defaults.GOAL_MODE,
+                  ArmConstants.J3Defaults.GOAL_OTHER_SCALE,
+                  ArmConstants.J3Defaults.USE_GLOBAL_ANGLE_FOR_GRAVITY,
                   ArmConstants.J3Defaults.KP,
                   ArmConstants.J3Defaults.KI,
                   ArmConstants.J3Defaults.KD,
@@ -101,18 +122,20 @@ public class ArmSubsystem extends SubsystemBase {
       j2.inactive();
       if (j3 != null) j3.inactive();
     } else if (which.equalsIgnoreCase(ArmConstants.J2.NAME)) {
-      j2.update(now);
+      // J2 gravity/feedforward may depend on J3 angle
+      j2.update(now, j3 != null ? j3.getAngleRad() : Double.NaN);
       j1.inactive();
       if (j3 != null) j3.inactive();
     } else if (which.equalsIgnoreCase(ArmConstants.J3.NAME)) {
-      if (j3 != null) j3.update(now);
+      // J3 goal may be relative to J2 angle (and vice versa if needed)
+      if (j3 != null) j3.update(now, j2.getAngleRad());
       j1.inactive();
       j2.inactive();
     } else {
       // "Both" (or anything else): keep old behavior
       j1.update(now);
-      j2.update(now);
-      if (j3 != null) j3.update(now);
+      j2.update(now, j3 != null ? j3.getAngleRad() : Double.NaN);
+      if (j3 != null) j3.update(now, j2.getAngleRad());
     }
   }
 }

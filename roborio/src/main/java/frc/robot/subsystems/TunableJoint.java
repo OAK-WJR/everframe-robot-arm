@@ -28,6 +28,11 @@ public final class TunableJoint {
 
   public static final class Defaults {
     public final double ks, kv, ka, kg;
+    public final double kg2, kg2OtherScale;
+    public final double globalOtherScale;
+    public final int goalMode;
+    public final double goalOtherScale;
+    public final boolean useGlobalAngleForGravity;
     public final double kp, ki, kd;
     public final double maxVolts;
     public final double iZoneDeg;
@@ -40,6 +45,12 @@ public final class TunableJoint {
         double kv,
         double ka,
         double kg,
+        double kg2,
+        double kg2OtherScale,
+        double globalOtherScale,
+        int goalMode,
+        double goalOtherScale,
+        boolean useGlobalAngleForGravity,
         double kp,
         double ki,
         double kd,
@@ -52,6 +63,12 @@ public final class TunableJoint {
       this.kv = kv;
       this.ka = ka;
       this.kg = kg;
+      this.kg2 = kg2;
+      this.kg2OtherScale = kg2OtherScale;
+      this.globalOtherScale = globalOtherScale;
+      this.goalMode = goalMode;
+      this.goalOtherScale = goalOtherScale;
+      this.useGlobalAngleForGravity = useGlobalAngleForGravity;
       this.kp = kp;
       this.ki = ki;
       this.kd = kd;
@@ -69,6 +86,7 @@ public final class TunableJoint {
   private final ProfiledPIDController pid;
   private final double baseMinDeg;
   private final double baseMaxDeg;
+  private final double ioSign; // +1 normal, -1 inverted (motor + encoder)
 
   private double prevSpVel = 0.0;
   private double lastOutVolts = 0.0;
@@ -78,6 +96,8 @@ public final class TunableJoint {
   // Control inputs
   private final NetworkTableEntry targetDeg;
   private final NetworkTableEntry zero;
+  private final NetworkTableEntry setPosDeg;
+  private final NetworkTableEntry setPos;
   private final NetworkTableEntry testEnable;
   private final NetworkTableEntry testAmpDeg;
   private final NetworkTableEntry testPeriodS;
@@ -87,6 +107,13 @@ public final class TunableJoint {
   private final NetworkTableEntry tuneLive;
   private final NetworkTableEntry ntkP, ntkI, ntkD;
   private final NetworkTableEntry ntKs, ntKv, ntKa, ntKg;
+  // Coupling
+  private final NetworkTableEntry ntGoalRelativeToOther; // if true: GoalDeg += OtherAngleDeg
+  private final NetworkTableEntry ntkG2; // extra gravity term coefficient (V)
+  private final NetworkTableEntry ntkG2OtherScale; // g2 = kG2*cos(self + other*scale)
+  private final NetworkTableEntry ntGlobalOtherScale; // global = self + scale*other
+  private final NetworkTableEntry ntGoalMode; // 0=local, 1=follow/add other, 2=global (local=goal-other)
+  private final NetworkTableEntry ntGoalOtherScale;
   private final NetworkTableEntry ntMaxVolts;
   // Soft limits (degrees)
   private final NetworkTableEntry ntMinDeg;
@@ -99,10 +126,16 @@ public final class TunableJoint {
   private final NetworkTableEntry ntAngleDeg, ntGoalDeg, ntOutVoltsCmd, ntEnabled;
   private final NetworkTableEntry ntInputTargetDeg, ntGoalSource;
   private final NetworkTableEntry ntActive;
+  private final NetworkTableEntry ntOtherAngleDeg, ntAngleDegGlobal, ntGoalDegGlobal;
 
   // Current applied values
   private double curkP, curkI, curkD;
   private double curKs, curKv, curKa, curKg;
+  private boolean curGoalRelativeToOther;
+  private double curkG2, curkG2OtherScale;
+  private double curGlobalOtherScale;
+  private int curGoalMode;
+  private double curGoalOtherScale;
   private double curMaxVolts;
   private double curMinDeg, curMaxDeg;
   private double curIZoneDeg, curIMaxVolts;
@@ -116,6 +149,7 @@ public final class TunableJoint {
       String name,
       ControllerType controllerType,
       int canId,
+      boolean inverted,
       double gearRatio,
       double minDeg,
       double maxDeg,
@@ -124,6 +158,7 @@ public final class TunableJoint {
     this.name = name;
     this.baseMinDeg = minDeg;
     this.baseMaxDeg = maxDeg;
+    this.ioSign = inverted ? -1.0 : 1.0;
     this.accelLimitRadPerS2 = Math.max(0.0, defaults.maxAcc);
     motor =
         controllerType == ControllerType.MAX
@@ -152,6 +187,8 @@ public final class TunableJoint {
     // Entries
     targetDeg = nt.getEntry("TargetDeg");
     zero = nt.getEntry("Zero");
+    setPosDeg = nt.getEntry("SetPosDeg");
+    setPos = nt.getEntry("SetPos");
     testEnable = nt.getEntry("TestEnable");
     testAmpDeg = nt.getEntry("TestAmpDeg");
     testPeriodS = nt.getEntry("TestPeriodS");
@@ -165,6 +202,12 @@ public final class TunableJoint {
     ntKv = nt.getEntry("Kv");
     ntKa = nt.getEntry("Ka");
     ntKg = nt.getEntry("kG");
+    ntGoalRelativeToOther = nt.getEntry("GoalRelativeToOther");
+    ntkG2 = nt.getEntry("kG2");
+    ntkG2OtherScale = nt.getEntry("kG2OtherScale");
+    ntGlobalOtherScale = nt.getEntry("GlobalOtherScale");
+    ntGoalMode = nt.getEntry("GoalMode");
+    ntGoalOtherScale = nt.getEntry("GoalOtherScale");
     ntMaxVolts = nt.getEntry("MaxVolts");
     ntMinDeg = nt.getEntry("MinDeg");
     ntMaxDeg = nt.getEntry("MaxDeg");
@@ -178,10 +221,15 @@ public final class TunableJoint {
     ntInputTargetDeg = nt.getEntry("InputTargetDeg");
     ntGoalSource = nt.getEntry("GoalSource"); // "manual" or "sine"
     ntActive = nt.getEntry("Active");
+    ntOtherAngleDeg = nt.getEntry("OtherAngleDeg");
+    ntAngleDegGlobal = nt.getEntry("AngleDegGlobal");
+    ntGoalDegGlobal = nt.getEntry("GoalDegGlobal");
 
     // Defaults (publish once)
     targetDeg.setDouble(0.0);
     zero.setBoolean(false);
+    setPosDeg.setDouble(0.0);
+    setPos.setBoolean(false);
     testEnable.setBoolean(false);
     testAmpDeg.setDouble(30.0);
     testPeriodS.setDouble(4.0);
@@ -196,6 +244,12 @@ public final class TunableJoint {
     curKv = defaults.kv;
     curKa = defaults.ka;
     curKg = defaults.kg;
+    curGoalRelativeToOther = defaults.useGlobalAngleForGravity;
+    curkG2 = defaults.kg2;
+    curkG2OtherScale = defaults.kg2OtherScale;
+    curGlobalOtherScale = defaults.globalOtherScale;
+    curGoalMode = defaults.goalMode;
+    curGoalOtherScale = defaults.goalOtherScale;
     curMaxVolts = defaults.maxVolts;
     curIZoneDeg = defaults.iZoneDeg;
     curIMaxVolts = defaults.iMaxVolts;
@@ -209,6 +263,12 @@ public final class TunableJoint {
     ntKv.setDouble(curKv);
     ntKa.setDouble(curKa);
     ntKg.setDouble(curKg);
+    ntGoalRelativeToOther.setBoolean(curGoalRelativeToOther);
+    ntkG2.setDouble(curkG2);
+    ntkG2OtherScale.setDouble(curkG2OtherScale);
+    ntGlobalOtherScale.setDouble(curGlobalOtherScale);
+    ntGoalMode.setDouble(curGoalMode);
+    ntGoalOtherScale.setDouble(curGoalOtherScale);
     ntMaxVolts.setDouble(curMaxVolts);
     ntMinDeg.setDouble(curMinDeg);
     ntMaxDeg.setDouble(curMaxDeg);
@@ -226,10 +286,13 @@ public final class TunableJoint {
     ntInputTargetDeg.setDouble(0.0);
     ntGoalSource.setString("manual");
     ntActive.setBoolean(true);
+    ntOtherAngleDeg.setDouble(0.0);
+    ntAngleDegGlobal.setDouble(0.0);
+    ntGoalDegGlobal.setDouble(0.0);
   }
 
   public String getName() { return name; }
-  public double getAngleRad() { return enc.getPosition(); }
+  public double getAngleRad() { return enc.getPosition() * ioSign; }
   public double getAngleDeg() { return Math.toDegrees(getAngleRad()); }
 
   public void zeroNow() {
@@ -252,13 +315,38 @@ public final class TunableJoint {
 
   /** Called by ArmSubsystem every 20ms. */
   public void update(double nowSec) {
+    update(nowSec, Double.NaN);
+  }
+
+  /** Update with a coupled "other joint" angle (rad). Pass NaN if unused. */
+  public void update(double nowSec, double otherAngleRad) {
     boolean enabled = DriverStation.isEnabled();
     ntActive.setBoolean(true);
 
     // One-shot zero
     if (zero.getBoolean(false)) {
       zeroNow();
+      // Prevent immediate motion: make current position the manual target.
+      targetDeg.setDouble(0.0);
+      // Safety: disable sine test when calibrating.
+      testEnable.setBoolean(false);
       zero.setBoolean(false);
+    }
+
+    // One-shot set position (deg)
+    if (setPos.getBoolean(false)) {
+      double deg = setPosDeg.getDouble(0.0);
+      double rad = Math.toRadians(deg);
+      // set raw encoder so that getAngleRad() becomes rad
+      enc.setPosition(rad * ioSign);
+      pid.reset(rad);
+      prevSpVel = 0.0;
+      lastDir = 0.0;
+      // Prevent immediate motion: make current position the manual target.
+      targetDeg.setDouble(deg);
+      // Safety: disable sine test when calibrating.
+      testEnable.setBoolean(false);
+      setPos.setBoolean(false);
     }
 
     // Apply tunables
@@ -275,6 +363,12 @@ public final class TunableJoint {
       curKv = ntKv.getDouble(curKv);
       curKa = ntKa.getDouble(curKa);
       curKg = ntKg.getDouble(curKg);
+      curGoalRelativeToOther = ntGoalRelativeToOther.getBoolean(curGoalRelativeToOther);
+      curkG2 = ntkG2.getDouble(curkG2);
+      curkG2OtherScale = ntkG2OtherScale.getDouble(curkG2OtherScale);
+      curGlobalOtherScale = ntGlobalOtherScale.getDouble(curGlobalOtherScale);
+      curGoalMode = (int) ntGoalMode.getDouble(curGoalMode);
+      curGoalOtherScale = ntGoalOtherScale.getDouble(curGoalOtherScale);
     }
     curMaxVolts = MathUtil.clamp(ntMaxVolts.getDouble(curMaxVolts), 0.0, 12.0);
     // Soft limits are always safe to apply
@@ -341,14 +435,32 @@ public final class TunableJoint {
     }
     prevTestEnable = test;
     // Apply joint angle limits
-    goalDeg = MathUtil.clamp(goalDeg, curMinDeg, curMaxDeg);
-    pid.setGoal(Math.toRadians(goalDeg));
+    double otherDeg = Double.isFinite(otherAngleRad) ? Math.toDegrees(otherAngleRad) : 0.0;
+    double localGoalDeg = goalDeg;
+    if (Double.isFinite(otherAngleRad)) {
+      if (curGoalMode == 1) {
+        // Follow/add other: local goal = goal + scale*other (set goal=0, scale=1 => local=other)
+        localGoalDeg = goalDeg + curGoalOtherScale * otherDeg;
+      } else if (curGoalMode == 2) {
+        // Global mode: treat goalDeg as global desired => local = goal - scale*other
+        localGoalDeg = goalDeg - curGoalOtherScale * otherDeg;
+      }
+    }
+    localGoalDeg = MathUtil.clamp(localGoalDeg, curMinDeg, curMaxDeg);
+    pid.setGoal(Math.toRadians(localGoalDeg));
 
     // Telemetry (inputs)
     ntEnabled.setBoolean(enabled);
-    ntAngleDeg.setDouble(getAngleDeg());
-    ntGoalDeg.setDouble(goalDeg);
+    double selfDeg = getAngleDeg();
+    ntAngleDeg.setDouble(selfDeg);
+    ntGoalDeg.setDouble(localGoalDeg); // local joint goal actually used
     ntInputTargetDeg.setDouble(targetDeg.getDouble(0.0));
+    ntOtherAngleDeg.setDouble(otherDeg);
+    // Always publish global angle/goal for debugging; if other is NaN, it's just local.
+    double globalDeg = Double.isFinite(otherAngleRad) ? selfDeg + curGlobalOtherScale * otherDeg : selfDeg;
+    double globalGoalDeg = Double.isFinite(otherAngleRad) ? localGoalDeg + curGlobalOtherScale * otherDeg : localGoalDeg;
+    ntAngleDegGlobal.setDouble(globalDeg);
+    ntGoalDegGlobal.setDouble(globalGoalDeg);
 
     if (!enabled) {
       motor.setVoltage(0.0);
@@ -382,8 +494,17 @@ public final class TunableJoint {
     if (sign != 0.0) lastDir = sign;
 
     // Gravity feedforward for arm-like joints.
-    // Uses setpoint angle (rad). Ensure your "zero" angle matches the physical reference you want.
-    double gVolts = curKg * Math.cos(sp.position);
+    // IMPORTANT: Gravity depends on *actual* angle, not setpoint. Using setpoint can cause brief pulses when
+    // the setpoint jumps (e.g., target=90deg => cos=0) even if the arm hasn't moved yet.
+    double selfAngleRad = getAngleRad();
+    double gravAngleRad =
+        (curGoalRelativeToOther && Double.isFinite(otherAngleRad))
+            ? selfAngleRad + curGlobalOtherScale * otherAngleRad
+            : selfAngleRad;
+    double gVolts = curKg * Math.cos(gravAngleRad);
+    if (Double.isFinite(otherAngleRad) && Math.abs(curkG2) > 1e-9) {
+      gVolts += curkG2 * Math.cos(selfAngleRad + curkG2OtherScale * otherAngleRad);
+    }
 
     double ffVolts =
         curKs * sign
@@ -393,8 +514,9 @@ public final class TunableJoint {
             + curKa * Math.abs(accel) * sign;
     double volts = pid.calculate(getAngleRad()) + ffVolts;
     lastOutVolts = MathUtil.clamp(volts, -curMaxVolts, curMaxVolts);
-    motor.setVoltage(lastOutVolts);
-    ntOutVoltsCmd.setDouble(lastOutVolts);
+    double applied = lastOutVolts * ioSign;
+    motor.setVoltage(applied);
+    ntOutVoltsCmd.setDouble(applied);
   }
 }
 

@@ -24,11 +24,21 @@ public final class Constants {
 
     /** Defaults published to NetworkTables for each joint (can be tuned at runtime). */
     public static final class JointDefaults {
-      public static final double KS = 0.2095, KV = 3.0, KA = 0.0; // (historical) KV=12.087, KA=0.81667
+      public static final double KS = 0.2095, KV = 3.0, KA = 0.01; // (historical) KV=12.087, KA=0.81667
       /** Gravity feedforward for arm-like joints (V). Used as kG * cos(thetaRad). */
       public static final double KG = 0.0;
+      /** Extra coupled gravity term (V): +kG2*cos(self + kG2OtherScale*other) */
+      public static final double KG2 = 0.0;
+      public static final double KG2_OTHER_SCALE = 1.0;
+      /** Global angle composition: global = self + GlobalOtherScale*other */
+      public static final double GLOBAL_OTHER_SCALE = 1.0;
+      /** GoalMode: 0 local, 1 follow/add other, 2 global (local = goal - s*other) */
+      public static final int GOAL_MODE = 0;
+      public static final double GOAL_OTHER_SCALE = 1.0;
+      /** If true: use global angle for kG*cos(angle). */
+      public static final boolean USE_GLOBAL_ANGLE_FOR_GRAVITY = false;
       public static final double KP = 35.0, KI = 100.0, KD = 1.2;
-      public static final double MAX_VOLTS = 5.0;
+      public static final double MAX_VOLTS = 3.0;
       public static final double IZONE_DEG = 0.5;
       public static final double I_MAX_VOLTS = 1.0;
       public static final double MAX_VEL = 6.0, MAX_ACC = 12.0; // rad/s, rad/s^2
@@ -38,6 +48,12 @@ public final class Constants {
     public static final class J1Defaults {
       public static final double KS = JointDefaults.KS, KV = JointDefaults.KV, KA = JointDefaults.KA;
       public static final double KG = JointDefaults.KG;
+      public static final double KG2 = JointDefaults.KG2;
+      public static final double KG2_OTHER_SCALE = JointDefaults.KG2_OTHER_SCALE;
+      public static final double GLOBAL_OTHER_SCALE = JointDefaults.GLOBAL_OTHER_SCALE;
+      public static final int GOAL_MODE = JointDefaults.GOAL_MODE;
+      public static final double GOAL_OTHER_SCALE = JointDefaults.GOAL_OTHER_SCALE;
+      public static final boolean USE_GLOBAL_ANGLE_FOR_GRAVITY = JointDefaults.USE_GLOBAL_ANGLE_FOR_GRAVITY;
       public static final double KP = JointDefaults.KP, KI = JointDefaults.KI, KD = JointDefaults.KD;
       public static final double MAX_VOLTS = JointDefaults.MAX_VOLTS;
       public static final double IZONE_DEG = JointDefaults.IZONE_DEG;
@@ -47,12 +63,19 @@ public final class Constants {
 
     /** J2 defaults (can differ from J1). */
     public static final class J2Defaults {
-      // TODO: 如需不同默认值，在这里改
-      public static final double KS = JointDefaults.KS, KV = JointDefaults.KV, KA = JointDefaults.KA;
-      public static final double KG = JointDefaults.KG;
-      public static final double KP = JointDefaults.KP, KI = JointDefaults.KI, KD = JointDefaults.KD;
+      // Synced from web tuning
+      public static final double KS = 0.2095, KV = 3.0, KA = 0.01;
+      public static final double KG = 0.3;
+      // Coupling defaults (edit if you want non-zero startup values)
+      public static final double KG2 = JointDefaults.KG2;
+      public static final double KG2_OTHER_SCALE = JointDefaults.KG2_OTHER_SCALE;
+      public static final double GLOBAL_OTHER_SCALE = JointDefaults.GLOBAL_OTHER_SCALE;
+      public static final int GOAL_MODE = JointDefaults.GOAL_MODE;
+      public static final double GOAL_OTHER_SCALE = JointDefaults.GOAL_OTHER_SCALE;
+      public static final boolean USE_GLOBAL_ANGLE_FOR_GRAVITY = JointDefaults.USE_GLOBAL_ANGLE_FOR_GRAVITY;
+      public static final double KP = 30.0, KI = 100.0, KD = 1.2;
       public static final double MAX_VOLTS = JointDefaults.MAX_VOLTS;
-      public static final double IZONE_DEG = JointDefaults.IZONE_DEG;
+      public static final double IZONE_DEG = 1.0;
       public static final double I_MAX_VOLTS = JointDefaults.I_MAX_VOLTS;
       public static final double MAX_VEL = JointDefaults.MAX_VEL, MAX_ACC = JointDefaults.MAX_ACC;
     }
@@ -61,7 +84,13 @@ public final class Constants {
     public static final class J3Defaults {
       // TODO: 如需不同默认值，在这里改（Spark MAX + NEO v1.1）
       public static final double KS = 0.19, KV = JointDefaults.KV, KA = JointDefaults.KA;
-      public static final double KG = -0.05;
+      public static final double KG = 0.05;
+      public static final double KG2 = JointDefaults.KG2;
+      public static final double KG2_OTHER_SCALE = JointDefaults.KG2_OTHER_SCALE;
+      public static final double GLOBAL_OTHER_SCALE = JointDefaults.GLOBAL_OTHER_SCALE;
+      public static final int GOAL_MODE = JointDefaults.GOAL_MODE;
+      public static final double GOAL_OTHER_SCALE = JointDefaults.GOAL_OTHER_SCALE;
+      public static final boolean USE_GLOBAL_ANGLE_FOR_GRAVITY = JointDefaults.USE_GLOBAL_ANGLE_FOR_GRAVITY;
       // Synced from web tuning
       public static final double KP = 40.0, KI = 100.0, KD = 0.7;
       public static final double MAX_VOLTS = JointDefaults.MAX_VOLTS;
@@ -77,6 +106,7 @@ public final class Constants {
       public static final double MIN_DEG = -180.0;
       public static final double MAX_DEG = 180.0;
       public static final RevController CONTROLLER = RevController.FLEX;
+      public static final boolean INVERTED = false;
     }
 
     // TODO: 修改为 J2 实际参数
@@ -87,6 +117,8 @@ public final class Constants {
       public static final double MIN_DEG = -210.0;
       public static final double MAX_DEG = 30.0;
       public static final RevController CONTROLLER = RevController.FLEX;
+      /** Requested: invert J2 motor output and encoder sign. */
+      public static final boolean INVERTED = true;
     }
 
     // TODO: 修改为 J3 实际限位
@@ -100,6 +132,7 @@ public final class Constants {
       public static final boolean ENABLED = true;
       /** 你日志提示 “not a SPARK MAX”，如果确实是 Spark Flex 请改为 FLEX。 */
       public static final RevController CONTROLLER = RevController.MAX;
+      public static final boolean INVERTED = false;
     }
   }
 }
