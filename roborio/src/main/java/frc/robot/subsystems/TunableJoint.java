@@ -87,6 +87,7 @@ public final class TunableJoint {
   private final double baseMinDeg;
   private final double baseMaxDeg;
   private final double ioSign; // +1 normal, -1 inverted (motor + encoder)
+  private final Defaults defaultsCfg;
 
   private double prevSpVel = 0.0;
   private double lastOutVolts = 0.0;
@@ -98,6 +99,7 @@ public final class TunableJoint {
   private final NetworkTableEntry zero;
   private final NetworkTableEntry setPosDeg;
   private final NetworkTableEntry setPos;
+  private final NetworkTableEntry resetDefaults;
   private final NetworkTableEntry testEnable;
   private final NetworkTableEntry testAmpDeg;
   private final NetworkTableEntry testPeriodS;
@@ -160,6 +162,7 @@ public final class TunableJoint {
     this.baseMaxDeg = maxDeg;
     this.ioSign = inverted ? -1.0 : 1.0;
     this.accelLimitRadPerS2 = Math.max(0.0, defaults.maxAcc);
+    this.defaultsCfg = defaults;
     motor =
         controllerType == ControllerType.MAX
             ? new SparkMax(canId, MotorType.kBrushless)
@@ -189,6 +192,7 @@ public final class TunableJoint {
     zero = nt.getEntry("Zero");
     setPosDeg = nt.getEntry("SetPosDeg");
     setPos = nt.getEntry("SetPos");
+    resetDefaults = nt.getEntry("ResetDefaults");
     testEnable = nt.getEntry("TestEnable");
     testAmpDeg = nt.getEntry("TestAmpDeg");
     testPeriodS = nt.getEntry("TestPeriodS");
@@ -230,6 +234,7 @@ public final class TunableJoint {
     zero.setBoolean(false);
     setPosDeg.setDouble(0.0);
     setPos.setBoolean(false);
+    resetDefaults.setBoolean(false);
     testEnable.setBoolean(false);
     testAmpDeg.setDouble(30.0);
     testPeriodS.setDouble(4.0);
@@ -291,6 +296,53 @@ public final class TunableJoint {
     ntGoalDegGlobal.setDouble(0.0);
   }
 
+  private void applyDefaultsToNtAndController() {
+    // Apply to internal state
+    curkP = defaultsCfg.kp;
+    curkI = defaultsCfg.ki;
+    curkD = defaultsCfg.kd;
+    curKs = defaultsCfg.ks;
+    curKv = defaultsCfg.kv;
+    curKa = defaultsCfg.ka;
+    curKg = defaultsCfg.kg;
+    curGoalRelativeToOther = defaultsCfg.useGlobalAngleForGravity;
+    curkG2 = defaultsCfg.kg2;
+    curkG2OtherScale = defaultsCfg.kg2OtherScale;
+    curGlobalOtherScale = defaultsCfg.globalOtherScale;
+    curGoalMode = defaultsCfg.goalMode;
+    curGoalOtherScale = defaultsCfg.goalOtherScale;
+    curMaxVolts = defaultsCfg.maxVolts;
+    curIZoneDeg = defaultsCfg.iZoneDeg;
+    curIMaxVolts = defaultsCfg.iMaxVolts;
+
+    // Publish to NT
+    ntkP.setDouble(curkP);
+    ntkI.setDouble(curkI);
+    ntkD.setDouble(curkD);
+    ntKs.setDouble(curKs);
+    ntKv.setDouble(curKv);
+    ntKa.setDouble(curKa);
+    ntKg.setDouble(curKg);
+    ntGoalRelativeToOther.setBoolean(curGoalRelativeToOther);
+    ntkG2.setDouble(curkG2);
+    ntkG2OtherScale.setDouble(curkG2OtherScale);
+    ntGlobalOtherScale.setDouble(curGlobalOtherScale);
+    ntGoalMode.setDouble(curGoalMode);
+    ntGoalOtherScale.setDouble(curGoalOtherScale);
+    ntMaxVolts.setDouble(curMaxVolts);
+    ntIZoneDeg.setDouble(curIZoneDeg);
+    ntIMaxVolts.setDouble(curIMaxVolts);
+
+    // Apply to controller
+    pid.setPID(curkP, curkI, curkD);
+    pid.setIntegratorRange(-curIMaxVolts, curIMaxVolts);
+    if (curIZoneDeg <= 0.0) {
+      pid.setIZone(Double.POSITIVE_INFINITY);
+    } else {
+      pid.setIZone(Math.toRadians(curIZoneDeg));
+    }
+  }
+
   public String getName() { return name; }
   public double getAngleRad() { return enc.getPosition() * ioSign; }
   public double getAngleDeg() { return Math.toDegrees(getAngleRad()); }
@@ -304,6 +356,28 @@ public final class TunableJoint {
 
   /** When not the selected joint: hold current angle and output 0V. */
   public void inactive() {
+    // Still process one-shot commands even when inactive (so web reset/zero/setpos always works).
+    if (resetDefaults.getBoolean(false)) {
+      applyDefaultsToNtAndController();
+      resetDefaults.setBoolean(false);
+    }
+    if (zero.getBoolean(false)) {
+      zeroNow();
+      targetDeg.setDouble(0.0);
+      testEnable.setBoolean(false);
+      zero.setBoolean(false);
+    }
+    if (setPos.getBoolean(false)) {
+      double deg = setPosDeg.getDouble(0.0);
+      double rad = Math.toRadians(deg);
+      enc.setPosition(rad * ioSign);
+      pid.reset(rad);
+      prevSpVel = 0.0;
+      lastDir = 0.0;
+      targetDeg.setDouble(deg);
+      testEnable.setBoolean(false);
+      setPos.setBoolean(false);
+    }
     pid.reset(getAngleRad());
     motor.setVoltage(0.0);
     lastOutVolts = 0.0;
@@ -322,6 +396,12 @@ public final class TunableJoint {
   public void update(double nowSec, double otherAngleRad) {
     boolean enabled = DriverStation.isEnabled();
     ntActive.setBoolean(true);
+
+    // One-shot reset defaults (from Constants)
+    if (resetDefaults.getBoolean(false)) {
+      applyDefaultsToNtAndController();
+      resetDefaults.setBoolean(false);
+    }
 
     // One-shot zero
     if (zero.getBoolean(false)) {

@@ -15,7 +15,7 @@ package frc.robot;
 public final class Constants {
   public static final class ArmConstants {
     public static final double DT = 0.02;
-    public static final double NOMINAL_VOLTAGE = 12.0;
+    public static final double NOMINAL_VOLTAGE = 3.0;
 
     public enum RevController {
       FLEX,
@@ -38,7 +38,7 @@ public final class Constants {
       /** If true: use global angle for kG*cos(angle). */
       public static final boolean USE_GLOBAL_ANGLE_FOR_GRAVITY = false;
       public static final double KP = 35.0, KI = 100.0, KD = 1.2;
-      public static final double MAX_VOLTS = 3.0;
+      public static final double MAX_VOLTS = 1.0;
       public static final double IZONE_DEG = 0.5;
       public static final double I_MAX_VOLTS = 1.0;
       public static final double MAX_VEL = 6.0, MAX_ACC = 12.0; // rad/s, rad/s^2
@@ -65,9 +65,9 @@ public final class Constants {
     public static final class J2Defaults {
       // Synced from web tuning
       public static final double KS = 0.2095, KV = 3.0, KA = 0.01;
-      public static final double KG = 0.3;
+      public static final double KG = 0.25;
       // Coupling defaults (edit if you want non-zero startup values)
-      public static final double KG2 = JointDefaults.KG2;
+      public static final double KG2 = 0.25;
       public static final double KG2_OTHER_SCALE = JointDefaults.KG2_OTHER_SCALE;
       public static final double GLOBAL_OTHER_SCALE = JointDefaults.GLOBAL_OTHER_SCALE;
       public static final int GOAL_MODE = JointDefaults.GOAL_MODE;
