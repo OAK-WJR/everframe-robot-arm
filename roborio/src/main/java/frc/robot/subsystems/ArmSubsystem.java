@@ -10,6 +10,9 @@ import frc.robot.Constants.ArmConstants;
 public class ArmSubsystem extends SubsystemBase {
   private final NetworkTableEntry activeJoint =
       NetworkTableInstance.getDefault().getTable("Arm").getEntry("ActiveJoint"); // "J1" / "J2" / "J3" / "Both"
+  /** If true: publish telemetry but force 0V output (safe monitor mode). */
+  private final NetworkTableEntry monitorOnly =
+      NetworkTableInstance.getDefault().getTable("Arm").getEntry("MonitorOnly");
 
   private final TunableJoint j1 =
       new TunableJoint(
@@ -112,30 +115,38 @@ public class ArmSubsystem extends SubsystemBase {
   @Override
   public void periodic() {
     double now = Timer.getFPGATimestamp();
-    String which = activeJoint.getString("");
+    boolean mo = monitorOnly.getBoolean(false);
+    // If any joint is requesting ROS control, force "Both" so UI/tools can't accidentally
+    // switch ActiveJoint to a single joint and disable the others.
+    boolean rosAny = j1.isRosEnableRequested() || j2.isRosEnableRequested() || (j3 != null && j3.isRosEnableRequested());
+    String which = rosAny ? "Both" : activeJoint.getString("");
     if (which == null || which.isEmpty()) {
       which = ArmConstants.J1.NAME;
       activeJoint.setString(which);
     }
+    if (rosAny) {
+      activeJoint.setString("Both");
+    }
+    // Snapshot angles for coupling (avoid order dependence)
+    double j2Angle = j2.getAngleRad();
+    double j3Angle = (j3 != null) ? j3.getAngleRad() : Double.NaN;
     if (which.equalsIgnoreCase(ArmConstants.J1.NAME)) {
-      j1.update(now);
+      j1.update(now, Double.NaN, mo);
       j2.inactive();
       if (j3 != null) j3.inactive();
     } else if (which.equalsIgnoreCase(ArmConstants.J2.NAME)) {
-      // J2 gravity/feedforward may depend on J3 angle
-      j2.update(now, j3 != null ? j3.getAngleRad() : Double.NaN);
+      j2.update(now, j3Angle, mo);
       j1.inactive();
       if (j3 != null) j3.inactive();
     } else if (which.equalsIgnoreCase(ArmConstants.J3.NAME)) {
-      // J3 goal may be relative to J2 angle (and vice versa if needed)
-      if (j3 != null) j3.update(now, j2.getAngleRad());
+      if (j3 != null) j3.update(now, j2Angle, mo);
       j1.inactive();
       j2.inactive();
     } else {
       // "Both" (or anything else): keep old behavior
-      j1.update(now);
-      j2.update(now, j3 != null ? j3.getAngleRad() : Double.NaN);
-      if (j3 != null) j3.update(now, j2.getAngleRad());
+      j1.update(now, Double.NaN, mo);
+      j2.update(now, j3Angle, mo);
+      if (j3 != null) j3.update(now, j2Angle, mo);
     }
   }
 }

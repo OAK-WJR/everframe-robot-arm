@@ -11,10 +11,15 @@ import com.revrobotics.spark.config.SparkBaseConfig.IdleMode;
 import com.revrobotics.spark.config.SparkFlexConfig;
 import com.revrobotics.spark.config.SparkMaxConfig;
 import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
+import edu.wpi.first.networktables.BooleanPublisher;
+import edu.wpi.first.networktables.DoublePublisher;
+import edu.wpi.first.networktables.IntegerSubscriber;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
+import edu.wpi.first.networktables.PubSubOption;
 import edu.wpi.first.wpilibj.DriverStation;
 import frc.robot.Constants.ArmConstants;
 import frc.robot.util.SineGoalGenerator;
@@ -84,6 +89,8 @@ public final class TunableJoint {
   private final SparkBase motor;
   private final RelativeEncoder enc;
   private final ProfiledPIDController pid;
+  /** ROS Scheme B (external setpoint tracking): standard PID controller. */
+  private final PIDController rosPid;
   private final double baseMinDeg;
   private final double baseMaxDeg;
   private final double ioSign; // +1 normal, -1 inverted (motor + encoder)
@@ -104,6 +111,15 @@ public final class TunableJoint {
   private final NetworkTableEntry testAmpDeg;
   private final NetworkTableEntry testPeriodS;
   private final NetworkTableEntry testOffsetDeg;
+
+  // --- ROS Scheme B inputs (Jetson -> roboRIO) ---
+  private final NetworkTableEntry rosEnable;
+  private final NetworkTableEntry rosPosRad;
+  private final NetworkTableEntry rosVelRadPerS;
+  private final NetworkTableEntry rosAccRadPerS2;
+  private final NetworkTableEntry rosSeq; // legacy/compat (double)
+  private final IntegerSubscriber rosSeqSub; // preferred (NT4 int64)
+  private final NetworkTableEntry rosTimeoutS;
 
   // Tunables
   private final NetworkTableEntry tuneLive;
@@ -129,6 +145,21 @@ public final class TunableJoint {
   private final NetworkTableEntry ntInputTargetDeg, ntGoalSource;
   private final NetworkTableEntry ntActive;
   private final NetworkTableEntry ntOtherAngleDeg, ntAngleDegGlobal, ntGoalDegGlobal;
+  // --- ROS Scheme B telemetry (roboRIO -> Jetson/Web) ---
+  private final NetworkTableEntry ntRosValid, ntRosAgeS, ntRosSeqEcho;
+  /** "manual" | "sine" | "ros" | "inactive" | "monitor" */
+  private final NetworkTableEntry ntControlMode;
+  /** Human-readable reason why output is forced to 0V. */
+  private final NetworkTableEntry ntInhibitReason;
+  // Debug/diagnostics for "early stop" misconceptions
+  private final NetworkTableEntry ntSoftLimitClamped; // boolean
+  private final NetworkTableEntry ntSaturated; // boolean
+  private final NetworkTableEntry ntOutVoltsRaw; // double (before MaxVolts clamp)
+  private final NetworkTableEntry ntNowSec; // heartbeat timestamp (seconds)
+
+  // NT4 high-rate publishers (50Hz). Entry publishing often defaults to ~0.1s.
+  private final DoublePublisher pubNowSec, pubAngleDeg, pubGoalDeg, pubOutVoltsCmd;
+  private final BooleanPublisher pubEnabled;
 
   // Current applied values
   private double curkP, curkI, curkD;
@@ -146,6 +177,69 @@ public final class TunableJoint {
   private boolean prevTestEnable = false;
   private double testStartTime = 0.0;
   private double prevTestAmp = 0.0, prevTestPeriod = 0.0, prevTestOffset = 0.0;
+
+  // ROS watchdog state
+  private long lastRosSeq = Long.MIN_VALUE;
+  private double lastRosUpdateSec = -1.0;
+
+  // sign selection hysteresis / thresholds (degrees)
+  private static final double SIGN_VEL_EPS_RAD_PER_S = 1e-4;
+  private static final double SIGN_ERR_DEADBAND_DEG = 0.25;
+  private static final double SIGN_ERR_FLIP_DEG = 0.75; // suggested 0.5~1.0deg
+
+  private static void setDefaultBoolean(NetworkTableEntry e, boolean v) {
+    try {
+      var m = e.getClass().getMethod("setDefaultBoolean", boolean.class);
+      m.invoke(e, v);
+    } catch (Exception ignored) {
+      // Do nothing (avoid overwriting external writers).
+    }
+  }
+
+  private static void setDefaultDouble(NetworkTableEntry e, double v) {
+    try {
+      var m = e.getClass().getMethod("setDefaultDouble", double.class);
+      m.invoke(e, v);
+    } catch (Exception ignored) {
+      // Do nothing (avoid overwriting external writers).
+    }
+  }
+
+  private static void setDefaultString(NetworkTableEntry e, String v) {
+    try {
+      var m = e.getClass().getMethod("setDefaultString", String.class);
+      m.invoke(e, v);
+    } catch (Exception ignored) {
+      // Do nothing (avoid overwriting external writers).
+    }
+  }
+
+  /** Read-only: whether an external client is requesting ROS control for this joint. */
+  public boolean isRosEnableRequested() {
+    return rosEnable.getBoolean(false);
+  }
+
+  private double computeSign(double velRadPerS, double posErrRad) {
+    if (Math.abs(velRadPerS) > SIGN_VEL_EPS_RAD_PER_S) {
+      double s = Math.signum(velRadPerS);
+      if (s != 0.0) lastDir = s;
+      return s;
+    }
+    double errDeg = Math.abs(Math.toDegrees(posErrRad));
+    double errSign = Math.signum(posErrRad);
+    double sign;
+    if (lastDir == 0.0) {
+      sign = (errDeg >= SIGN_ERR_FLIP_DEG) ? errSign : 0.0;
+    } else if (errDeg < SIGN_ERR_DEADBAND_DEG) {
+      sign = lastDir;
+    } else if (errSign == lastDir) {
+      sign = lastDir;
+    } else {
+      sign = (errDeg >= SIGN_ERR_FLIP_DEG) ? errSign : lastDir;
+    }
+    if (sign != 0.0) lastDir = sign;
+    return sign;
+  }
 
   public TunableJoint(
       String name,
@@ -187,6 +281,10 @@ public final class TunableJoint {
     pid.setTolerance(Math.toRadians(1.0));
     pid.reset(getAngleRad());
 
+    rosPid = new PIDController(defaults.kp, defaults.ki, defaults.kd, ArmConstants.DT);
+    rosPid.setTolerance(Math.toRadians(1.0));
+    rosPid.reset();
+
     // Entries
     targetDeg = nt.getEntry("TargetDeg");
     zero = nt.getEntry("Zero");
@@ -197,6 +295,14 @@ public final class TunableJoint {
     testAmpDeg = nt.getEntry("TestAmpDeg");
     testPeriodS = nt.getEntry("TestPeriodS");
     testOffsetDeg = nt.getEntry("TestOffsetDeg");
+
+    rosEnable = nt.getEntry("RosEnable");
+    rosPosRad = nt.getEntry("RosPosRad");
+    rosVelRadPerS = nt.getEntry("RosVelRadPerS");
+    rosAccRadPerS2 = nt.getEntry("RosAccRadPerS2");
+    rosSeq = nt.getEntry("RosSeq");
+    rosSeqSub = nt.getIntegerTopic("RosSeq").subscribe(0, PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
+    rosTimeoutS = nt.getEntry("RosTimeoutS");
 
     tuneLive = nt.getEntry("TuneLive");
     ntkP = nt.getEntry("kP");
@@ -228,6 +334,22 @@ public final class TunableJoint {
     ntOtherAngleDeg = nt.getEntry("OtherAngleDeg");
     ntAngleDegGlobal = nt.getEntry("AngleDegGlobal");
     ntGoalDegGlobal = nt.getEntry("GoalDegGlobal");
+    ntRosValid = nt.getEntry("RosValid");
+    ntRosAgeS = nt.getEntry("RosAgeS");
+    ntRosSeqEcho = nt.getEntry("RosSeqEcho");
+    ntControlMode = nt.getEntry("ControlMode");
+    ntInhibitReason = nt.getEntry("InhibitReason");
+    ntSoftLimitClamped = nt.getEntry("SoftLimitClamped");
+    ntSaturated = nt.getEntry("Saturated");
+    ntOutVoltsRaw = nt.getEntry("OutVoltsRaw");
+    ntNowSec = nt.getEntry("NowSec");
+
+    pubNowSec = nt.getDoubleTopic("NowSec").publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
+    pubAngleDeg = nt.getDoubleTopic("AngleDeg").publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
+    pubGoalDeg = nt.getDoubleTopic("GoalDeg").publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
+    pubOutVoltsCmd =
+        nt.getDoubleTopic("OutVoltsCmd").publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
+    pubEnabled = nt.getBooleanTopic("Enabled").publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
 
     // Defaults (publish once)
     targetDeg.setDouble(0.0);
@@ -241,6 +363,15 @@ public final class TunableJoint {
     testOffsetDeg.setDouble(0.0);
 
     tuneLive.setBoolean(false);
+
+    // ROS defaults (do not overwrite external writers)
+    setDefaultBoolean(rosEnable, false);
+    setDefaultDouble(rosPosRad, 0.0);
+    setDefaultDouble(rosVelRadPerS, 0.0);
+    setDefaultDouble(rosAccRadPerS2, 0.0);
+    setDefaultDouble(rosSeq, 0.0);
+    // Recommended starting range: 0.25~0.40s (avoid too small); watchdog floor is enforced in code.
+    setDefaultDouble(rosTimeoutS, 0.30);
 
     curkP = defaults.kp;
     curkI = defaults.ki;
@@ -289,11 +420,25 @@ public final class TunableJoint {
     ntOutVoltsCmd.setDouble(0.0);
     ntEnabled.setBoolean(false);
     ntInputTargetDeg.setDouble(0.0);
-    ntGoalSource.setString("manual");
+    setDefaultString(ntGoalSource, "manual");
     ntActive.setBoolean(true);
     ntOtherAngleDeg.setDouble(0.0);
     ntAngleDegGlobal.setDouble(0.0);
     ntGoalDegGlobal.setDouble(0.0);
+    setDefaultDouble(ntNowSec, 0.0);
+    setDefaultBoolean(ntRosValid, false);
+    setDefaultDouble(ntRosAgeS, 1e9);
+    setDefaultDouble(ntRosSeqEcho, 0.0);
+    setDefaultString(ntControlMode, "manual");
+    setDefaultString(ntInhibitReason, "");
+    setDefaultBoolean(ntSoftLimitClamped, false);
+    setDefaultBoolean(ntSaturated, false);
+    setDefaultDouble(ntOutVoltsRaw, 0.0);
+    pubNowSec.set(0.0);
+    pubAngleDeg.set(0.0);
+    pubGoalDeg.set(0.0);
+    pubOutVoltsCmd.set(0.0);
+    pubEnabled.set(false);
   }
 
   private void applyDefaultsToNtAndController() {
@@ -335,6 +480,7 @@ public final class TunableJoint {
 
     // Apply to controller
     pid.setPID(curkP, curkI, curkD);
+    rosPid.setPID(curkP, curkI, curkD);
     pid.setIntegratorRange(-curIMaxVolts, curIMaxVolts);
     if (curIZoneDeg <= 0.0) {
       pid.setIZone(Double.POSITIVE_INFINITY);
@@ -350,6 +496,7 @@ public final class TunableJoint {
   public void zeroNow() {
     enc.setPosition(0.0);
     pid.reset(0.0);
+    rosPid.reset();
     prevSpVel = 0.0;
     lastDir = 0.0;
   }
@@ -382,20 +529,36 @@ public final class TunableJoint {
     motor.setVoltage(0.0);
     lastOutVolts = 0.0;
     ntActive.setBoolean(false);
-    ntEnabled.setBoolean(DriverStation.isEnabled());
-    ntAngleDeg.setDouble(getAngleDeg());
+    boolean enabled = DriverStation.isEnabled();
+    ntEnabled.setBoolean(enabled);
+    pubEnabled.set(enabled);
+    double selfDeg = getAngleDeg();
+    ntAngleDeg.setDouble(selfDeg);
+    pubAngleDeg.set(selfDeg);
     ntOutVoltsCmd.setDouble(0.0);
+    pubOutVoltsCmd.set(0.0);
+    ntControlMode.setString("inactive");
+    ntInhibitReason.setString("inactive");
   }
 
   /** Called by ArmSubsystem every 20ms. */
   public void update(double nowSec) {
-    update(nowSec, Double.NaN);
+    update(nowSec, Double.NaN, false);
   }
 
   /** Update with a coupled "other joint" angle (rad). Pass NaN if unused. */
   public void update(double nowSec, double otherAngleRad) {
+    update(nowSec, otherAngleRad, false);
+  }
+
+  /** Update with other joint angle + monitor-only flag. */
+  public void update(double nowSec, double otherAngleRad, boolean monitorOnly) {
     boolean enabled = DriverStation.isEnabled();
     ntActive.setBoolean(true);
+    ntEnabled.setBoolean(enabled);
+    pubEnabled.set(enabled);
+    ntNowSec.setDouble(nowSec);
+    pubNowSec.set(nowSec);
 
     // One-shot reset defaults (from Constants)
     if (resetDefaults.getBoolean(false)) {
@@ -406,10 +569,12 @@ public final class TunableJoint {
     // One-shot zero
     if (zero.getBoolean(false)) {
       zeroNow();
-      // Prevent immediate motion: make current position the manual target.
-      targetDeg.setDouble(0.0);
-      // Safety: disable sine test when calibrating.
-      testEnable.setBoolean(false);
+      if (!monitorOnly) {
+        // Prevent immediate motion: make current position the manual target.
+        targetDeg.setDouble(0.0);
+        // Safety: disable sine test when calibrating.
+        testEnable.setBoolean(false);
+      }
       zero.setBoolean(false);
     }
 
@@ -420,13 +585,40 @@ public final class TunableJoint {
       // set raw encoder so that getAngleRad() becomes rad
       enc.setPosition(rad * ioSign);
       pid.reset(rad);
+      rosPid.reset();
       prevSpVel = 0.0;
       lastDir = 0.0;
-      // Prevent immediate motion: make current position the manual target.
-      targetDeg.setDouble(deg);
-      // Safety: disable sine test when calibrating.
-      testEnable.setBoolean(false);
+      if (!monitorOnly) {
+        // Prevent immediate motion: make current position the manual target.
+        targetDeg.setDouble(deg);
+        // Safety: disable sine test when calibrating.
+        testEnable.setBoolean(false);
+      }
       setPos.setBoolean(false);
+    }
+
+    // Monitor-only: publish telemetry but never drive motors.
+    if (monitorOnly) {
+      ntEnabled.setBoolean(enabled);
+      pubEnabled.set(enabled);
+      double selfDeg = getAngleDeg();
+      ntAngleDeg.setDouble(selfDeg);
+      pubAngleDeg.set(selfDeg);
+      ntInputTargetDeg.setDouble(targetDeg.getDouble(0.0));
+      double otherDeg = Double.isFinite(otherAngleRad) ? Math.toDegrees(otherAngleRad) : 0.0;
+      ntOtherAngleDeg.setDouble(otherDeg);
+      double globalDeg = Double.isFinite(otherAngleRad) ? selfDeg + curGlobalOtherScale * otherDeg : selfDeg;
+      ntAngleDegGlobal.setDouble(globalDeg);
+      ntGoalSource.setString(testEnable.getBoolean(false) ? "sine" : "manual");
+      pubGoalDeg.set(ntGoalDeg.getDouble(0.0));
+      ntGoalDegGlobal.setDouble(ntGoalDegGlobal.getDouble(0.0));
+      motor.setVoltage(0.0);
+      lastOutVolts = 0.0;
+      ntOutVoltsCmd.setDouble(0.0);
+      pubOutVoltsCmd.set(0.0);
+      ntControlMode.setString("monitor");
+      ntInhibitReason.setString("monitorOnly");
+      return;
     }
 
     // Apply tunables
@@ -476,6 +668,128 @@ public final class TunableJoint {
     }
     curIMaxVolts = MathUtil.clamp(ntIMaxVolts.getDouble(curIMaxVolts), 0.0, 12.0);
     pid.setIntegratorRange(-curIMaxVolts, curIMaxVolts);
+
+    // --- ROS Scheme B: external setpoint tracking (pos/vel/acc) ---
+    boolean rosOn = rosEnable.getBoolean(false);
+    if (rosOn) {
+      // Watchdog based on RosSeq updates
+      // Minimum timeout floor to avoid "stop and go" due to jitter.
+      double timeout = Math.max(rosTimeoutS.getDouble(0.30), 0.20);
+      long seq = rosSeqSub.get();
+      if (seq == 0) seq = (long) rosSeq.getDouble(0.0); // legacy fallback
+      if (seq != lastRosSeq) {
+        lastRosSeq = seq;
+        lastRosUpdateSec = nowSec;
+      }
+      double age = (lastRosUpdateSec < 0.0) ? 1e9 : (nowSec - lastRosUpdateSec);
+      boolean rosValid = enabled && age <= timeout;
+      ntRosValid.setBoolean(rosValid);
+      ntRosAgeS.setDouble(age);
+      ntRosSeqEcho.setDouble((double) lastRosSeq);
+      ntControlMode.setString("ros");
+
+      // Read commanded setpoints
+      double desiredPos = rosPosRad.getDouble(0.0);
+      double desiredVel = rosVelRadPerS.getDouble(0.0);
+      double desiredAcc = rosAccRadPerS2.getDouble(0.0);
+
+      // Clamp desired position to soft limits (local joint coords)
+      double minRad = Math.toRadians(curMinDeg);
+      double maxRad = Math.toRadians(curMaxDeg);
+      double posClamped = MathUtil.clamp(desiredPos, minRad, maxRad);
+      boolean clamped = posClamped != desiredPos;
+      ntSoftLimitClamped.setBoolean(clamped);
+      // If clamped and command is trying to push further into the limit, zero vel/acc FF.
+      if (clamped) {
+        if ((posClamped <= minRad + 1e-9 && desiredVel < 0.0) || (posClamped >= maxRad - 1e-9 && desiredVel > 0.0)) {
+          desiredVel = 0.0;
+          desiredAcc = 0.0;
+        }
+      }
+
+      double goalDeg = Math.toDegrees(posClamped);
+      ntGoalDeg.setDouble(goalDeg);
+      pubGoalDeg.set(goalDeg);
+      ntGoalSource.setString("ros");
+
+      // Publish angle telemetry
+      double selfDeg = getAngleDeg();
+      ntAngleDeg.setDouble(selfDeg);
+      pubAngleDeg.set(selfDeg);
+      double otherDeg = Double.isFinite(otherAngleRad) ? Math.toDegrees(otherAngleRad) : 0.0;
+      ntOtherAngleDeg.setDouble(otherDeg);
+      double globalDeg = Double.isFinite(otherAngleRad) ? selfDeg + curGlobalOtherScale * otherDeg : selfDeg;
+      ntAngleDegGlobal.setDouble(globalDeg);
+      double globalGoalDeg = Double.isFinite(otherAngleRad) ? goalDeg + curGlobalOtherScale * otherDeg : goalDeg;
+      ntGoalDegGlobal.setDouble(globalGoalDeg);
+
+      // Gate conditions
+      if (!enabled) {
+        motor.setVoltage(0.0);
+        lastOutVolts = 0.0;
+        ntOutVoltsCmd.setDouble(0.0);
+        pubOutVoltsCmd.set(0.0);
+        ntInhibitReason.setString("disabled");
+        return;
+      }
+      if (curMaxVolts <= 1e-6) {
+        motor.setVoltage(0.0);
+        lastOutVolts = 0.0;
+        ntOutVoltsCmd.setDouble(0.0);
+        pubOutVoltsCmd.set(0.0);
+        ntInhibitReason.setString("maxVolts=0");
+        return;
+      }
+      if (!rosValid) {
+        motor.setVoltage(0.0);
+        lastOutVolts = 0.0;
+        ntOutVoltsCmd.setDouble(0.0);
+        pubOutVoltsCmd.set(0.0);
+        ntInhibitReason.setString("rosTimeout");
+        return;
+      }
+
+      // Control
+      double selfRad = getAngleRad();
+      double posErr = posClamped - selfRad;
+      double sign = computeSign(desiredVel, posErr);
+
+      // Gravity feedforward uses actual angle (optionally composed with other)
+      double gravAngleRad =
+          (curGoalRelativeToOther && Double.isFinite(otherAngleRad))
+              ? selfRad + curGlobalOtherScale * otherAngleRad
+              : selfRad;
+      double gVolts = curKg * Math.cos(gravAngleRad);
+      if (Double.isFinite(otherAngleRad) && Math.abs(curkG2) > 1e-9) {
+        gVolts += curkG2 * Math.cos(selfRad + curkG2OtherScale * otherAngleRad);
+      }
+
+      double ffVolts =
+          curKs * sign
+              + gVolts
+              + curKv * desiredVel
+              + curKa * Math.abs(desiredAcc) * sign;
+
+      double pidVolts = rosPid.calculate(selfRad, posClamped);
+      double raw = pidVolts + ffVolts;
+      ntOutVoltsRaw.setDouble(raw);
+      boolean saturated = Math.abs(raw) > curMaxVolts + 1e-9;
+      ntSaturated.setBoolean(saturated);
+
+      lastOutVolts = MathUtil.clamp(raw, -curMaxVolts, curMaxVolts);
+      double applied = lastOutVolts * ioSign;
+      motor.setVoltage(applied);
+      ntOutVoltsCmd.setDouble(applied);
+      pubOutVoltsCmd.set(applied);
+      ntInhibitReason.setString("");
+      return;
+    } else {
+      ntRosValid.setBoolean(false);
+      ntRosAgeS.setDouble((lastRosUpdateSec < 0.0) ? 1e9 : (nowSec - lastRosUpdateSec));
+      ntRosSeqEcho.setDouble((lastRosSeq == Long.MIN_VALUE) ? 0.0 : (double) lastRosSeq);
+      ntSoftLimitClamped.setBoolean(false);
+      ntSaturated.setBoolean(false);
+    }
 
     // Goal source: sine test or manual target
     boolean test = testEnable.getBoolean(false);
@@ -531,9 +845,12 @@ public final class TunableJoint {
 
     // Telemetry (inputs)
     ntEnabled.setBoolean(enabled);
+    pubEnabled.set(enabled);
     double selfDeg = getAngleDeg();
     ntAngleDeg.setDouble(selfDeg);
+    pubAngleDeg.set(selfDeg);
     ntGoalDeg.setDouble(localGoalDeg); // local joint goal actually used
+    pubGoalDeg.set(localGoalDeg);
     ntInputTargetDeg.setDouble(targetDeg.getDouble(0.0));
     ntOtherAngleDeg.setDouble(otherDeg);
     // Always publish global angle/goal for debugging; if other is NaN, it's just local.
@@ -546,6 +863,9 @@ public final class TunableJoint {
       motor.setVoltage(0.0);
       lastOutVolts = 0.0;
       ntOutVoltsCmd.setDouble(0.0);
+      pubOutVoltsCmd.set(0.0);
+      ntControlMode.setString(test ? "sine" : "manual");
+      ntInhibitReason.setString("disabled");
       return;
     }
 
@@ -563,15 +883,7 @@ public final class TunableJoint {
     // - Otherwise use goal - setpoint position, but with a small deadband to avoid sign flapping
     // - Otherwise hold last non-zero direction (prevents +/-Ks jitter around 0)
     double posErr = pid.getGoal().position - sp.position;
-    double sign;
-    if (Math.abs(vel) > 1e-4) {
-      sign = Math.signum(vel);
-    } else if (Math.abs(posErr) > Math.toRadians(0.25)) {
-      sign = Math.signum(posErr);
-    } else {
-      sign = lastDir;
-    }
-    if (sign != 0.0) lastDir = sign;
+    double sign = computeSign(vel, posErr);
 
     // Gravity feedforward for arm-like joints.
     // IMPORTANT: Gravity depends on *actual* angle, not setpoint. Using setpoint can cause brief pulses when
@@ -597,6 +909,9 @@ public final class TunableJoint {
     double applied = lastOutVolts * ioSign;
     motor.setVoltage(applied);
     ntOutVoltsCmd.setDouble(applied);
+    pubOutVoltsCmd.set(applied);
+    ntControlMode.setString(test ? "sine" : "manual");
+    ntInhibitReason.setString(curMaxVolts <= 1e-6 ? "maxVolts=0" : "");
   }
 }
 

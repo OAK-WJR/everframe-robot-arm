@@ -15,7 +15,9 @@ package frc.robot;
 public final class Constants {
   public static final class ArmConstants {
     public static final double DT = 0.02;
-    public static final double NOMINAL_VOLTAGE = 3.0;
+    public static final double NOMINAL_VOLTAGE = 12.0;
+    /** NT4 publisher periodic for high-frequency telemetry (seconds). */
+    public static final double NT_FAST_PERIOD_S = 0.02;
 
     public enum RevController {
       FLEX,
@@ -103,8 +105,8 @@ public final class Constants {
       public static final String NAME = "J1";
       public static final int CAN_ID = 2;
       public static final double GEAR_RATIO = 100.0; // motor:joint
-      public static final double MIN_DEG = -180.0;
-      public static final double MAX_DEG = 180.0;
+      public static final double MIN_DEG = -360.0;
+      public static final double MAX_DEG = 360.0;
       public static final RevController CONTROLLER = RevController.FLEX;
       public static final boolean INVERTED = false;
     }
@@ -114,8 +116,8 @@ public final class Constants {
       public static final String NAME = "J2";
       public static final int CAN_ID = 3;
       public static final double GEAR_RATIO = 100.0; // motor:joint
-      public static final double MIN_DEG = -210.0;
-      public static final double MAX_DEG = 30.0;
+      public static final double MIN_DEG = -25.0;
+      public static final double MAX_DEG = 215.0;
       public static final RevController CONTROLLER = RevController.FLEX;
       /** Requested: invert J2 motor output and encoder sign. */
       public static final boolean INVERTED = true;
