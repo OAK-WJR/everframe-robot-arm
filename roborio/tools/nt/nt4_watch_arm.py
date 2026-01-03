@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import time
 from dataclasses import dataclass
 
@@ -93,9 +94,16 @@ def main() -> int:
     sub_sat = jt.getBooleanTopic("Saturated").subscribe(False, opt)
     sub_clamp = jt.getBooleanTopic("SoftLimitClamped").subscribe(False, opt)
 
-    # warmup: 等待首批 topic/value 同步
+    # warmup: 等待连接 + 首批 topic/value 同步
     t0 = time.time()
     while time.time() - t0 < args.warmup:
+        time.sleep(0.02)
+    # additional: wait until NowSec becomes finite (up to 2s) so we don't print tons of nan
+    t1 = time.time()
+    while time.time() - t1 < 2.0:
+        v = float(sub_now.get())
+        if math.isfinite(v):
+            break
         time.sleep(0.02)
 
     period = 1.0 / max(args.hz, 1.0)
@@ -158,11 +166,12 @@ def main() -> int:
         if now - last_print >= 0.05:
             last_print = now
             print(
-                f"[{args.joint}] Enabled={row.enabled} ArmEnabled={_fmt(bool(sub_arm_enabled.get()))} "
+                f"[{args.joint}] Connected={inst.isConnected()} Enabled={row.enabled} ArmEnabled={_fmt(bool(sub_arm_enabled.get()))} "
                 f"MonitorOnly={row.monitor_only} ActiveJoint={row.active_joint} "
                 f"RosEnable={row.ros_enable} RosValid={row.ros_valid} AgeS={_fmt(row.ros_age_s)} "
                 f"Seq={_fmt(row.ros_seq)} Echo={_fmt(float(sub_ros_seq_echo.get()))} "
                 f"Mode={row.control_mode} Inhibit={row.inhibit_reason} "
+                f"NowSec={_fmt(float(sub_now.get()))} "
                 f"AngleDeg={_fmt(row.angle_deg)} GoalDeg={_fmt(row.goal_deg)} "
                 f"OutV={_fmt(row.out_volts_cmd)} Raw={_fmt(row.out_volts_raw)} "
                 f"Sat={row.saturated} Clamp={row.soft_limit_clamped}"

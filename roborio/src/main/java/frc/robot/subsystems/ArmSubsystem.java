@@ -2,6 +2,9 @@ package frc.robot.subsystems;
 
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.networktables.NetworkTableEntry;
+import edu.wpi.first.networktables.BooleanPublisher;
+import edu.wpi.first.networktables.PubSubOption;
+import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Constants.ArmConstants;
@@ -13,6 +16,13 @@ public class ArmSubsystem extends SubsystemBase {
   /** If true: publish telemetry but force 0V output (safe monitor mode). */
   private final NetworkTableEntry monitorOnly =
       NetworkTableInstance.getDefault().getTable("Arm").getEntry("MonitorOnly");
+
+  /** Global Enabled status (consistent with DriverStation.isEnabled()). */
+  private final BooleanPublisher pubEnabled =
+      NetworkTableInstance.getDefault()
+          .getTable("Arm")
+          .getBooleanTopic("Enabled")
+          .publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
 
   private final TunableJoint j1 =
       new TunableJoint(
@@ -116,6 +126,7 @@ public class ArmSubsystem extends SubsystemBase {
   public void periodic() {
     double now = Timer.getFPGATimestamp();
     boolean mo = monitorOnly.getBoolean(false);
+    pubEnabled.set(DriverStation.isEnabled());
     // If any joint is requesting ROS control, force "Both" so UI/tools can't accidentally
     // switch ActiveJoint to a single joint and disable the others.
     boolean rosAny = j1.isRosEnableRequested() || j2.isRosEnableRequested() || (j3 != null && j3.isRosEnableRequested());

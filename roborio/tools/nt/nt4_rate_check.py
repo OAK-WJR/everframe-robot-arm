@@ -12,9 +12,18 @@ NT4 订阅速率检查（用于确认是不是 NT3/默认 periodic 导致 ~10Hz�
 from __future__ import annotations
 
 import argparse
+import math
 import time
 
 from ntcore import NetworkTableInstance, PubSubOptions
+
+
+def _eq(a: float, b: float) -> bool:
+    # Treat NaN == NaN for our change counting (otherwise nan != nan makes fake "changes").
+    if isinstance(a, float) and isinstance(b, float):
+        if math.isnan(a) and math.isnan(b):
+            return True
+    return a == b
 
 
 def main() -> int:
@@ -48,14 +57,17 @@ def main() -> int:
     start = time.time()
     last = {k: None for k, _ in keys}
     changes = {k: 0 for k, _ in keys}
+    seen_finite = {k: False for k, _ in keys}
 
     while time.time() - start < args.dur:
         for k, sub in keys:
             v = sub.get()
+            if isinstance(v, float) and math.isfinite(v):
+                seen_finite[k] = True
             if last[k] is None:
                 last[k] = v
             else:
-                if v != last[k]:
+                if not _eq(v, last[k]):
                     changes[k] += 1
                     last[k] = v
         time.sleep(0.001)
@@ -63,7 +75,8 @@ def main() -> int:
     print(f"=== NT4 rate check Arm/{args.joint}/ periodic={args.periodic:.3f}s dur={args.dur:.1f}s ===")
     for k, _ in keys:
         hz = changes[k] / args.dur
-        print(f"{k:10s} changes={changes[k]:4d} ~{hz:6.1f} Hz last={last[k]}")
+        suffix = "" if seen_finite[k] else " (no finite data)"
+        print(f"{k:10s} changes={changes[k]:4d} ~{hz:6.1f} Hz last={last[k]}{suffix}")
     return 0
 
 

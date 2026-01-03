@@ -120,6 +120,13 @@ public final class TunableJoint {
   private final NetworkTableEntry rosSeq; // legacy/compat (double)
   private final IntegerSubscriber rosSeqSub; // preferred (NT4 int64)
   private final NetworkTableEntry rosTimeoutS;
+  // --- ROS smoothing (optional) ---
+  /** Low-pass time constant for RosVel (seconds). 0 disables. */
+  private final NetworkTableEntry rosVelTauS;
+  /** Low-pass time constant for RosAcc (seconds). 0 disables. */
+  private final NetworkTableEntry rosAccTauS;
+  /** Limit d(acc)/dt (rad/s^3). 0 disables. */
+  private final NetworkTableEntry rosJerkLimitRadPerS3;
 
   // Tunables
   private final NetworkTableEntry tuneLive;
@@ -151,6 +158,8 @@ public final class TunableJoint {
   private final NetworkTableEntry ntControlMode;
   /** Human-readable reason why output is forced to 0V. */
   private final NetworkTableEntry ntInhibitReason;
+  // ROS smoothing telemetry
+  private final NetworkTableEntry ntRosVelFiltRadPerS, ntRosAccFiltRadPerS2;
   // Debug/diagnostics for "early stop" misconceptions
   private final NetworkTableEntry ntSoftLimitClamped; // boolean
   private final NetworkTableEntry ntSaturated; // boolean
@@ -181,6 +190,8 @@ public final class TunableJoint {
   // ROS watchdog state
   private long lastRosSeq = Long.MIN_VALUE;
   private double lastRosUpdateSec = -1.0;
+  private double rosVelFiltRadPerS = 0.0;
+  private double rosAccFiltRadPerS2 = 0.0;
 
   // sign selection hysteresis / thresholds (degrees)
   private static final double SIGN_VEL_EPS_RAD_PER_S = 1e-4;
@@ -303,6 +314,9 @@ public final class TunableJoint {
     rosSeq = nt.getEntry("RosSeq");
     rosSeqSub = nt.getIntegerTopic("RosSeq").subscribe(0, PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
     rosTimeoutS = nt.getEntry("RosTimeoutS");
+    rosVelTauS = nt.getEntry("RosVelTauS");
+    rosAccTauS = nt.getEntry("RosAccTauS");
+    rosJerkLimitRadPerS3 = nt.getEntry("RosJerkLimitRadPerS3");
 
     tuneLive = nt.getEntry("TuneLive");
     ntkP = nt.getEntry("kP");
@@ -339,6 +353,8 @@ public final class TunableJoint {
     ntRosSeqEcho = nt.getEntry("RosSeqEcho");
     ntControlMode = nt.getEntry("ControlMode");
     ntInhibitReason = nt.getEntry("InhibitReason");
+    ntRosVelFiltRadPerS = nt.getEntry("RosVelFiltRadPerS");
+    ntRosAccFiltRadPerS2 = nt.getEntry("RosAccFiltRadPerS2");
     ntSoftLimitClamped = nt.getEntry("SoftLimitClamped");
     ntSaturated = nt.getEntry("Saturated");
     ntOutVoltsRaw = nt.getEntry("OutVoltsRaw");
@@ -372,6 +388,10 @@ public final class TunableJoint {
     setDefaultDouble(rosSeq, 0.0);
     // Recommended starting range: 0.25~0.40s (avoid too small); watchdog floor is enforced in code.
     setDefaultDouble(rosTimeoutS, 0.30);
+    // Smoothing defaults: small filtering to remove “颗粒感”，但不明显拖慢位置跟踪
+    setDefaultDouble(rosVelTauS, 0.08);
+    setDefaultDouble(rosAccTauS, 0.08);
+    setDefaultDouble(rosJerkLimitRadPerS3, 0.0);
 
     curkP = defaults.kp;
     curkI = defaults.ki;
@@ -431,6 +451,8 @@ public final class TunableJoint {
     setDefaultDouble(ntRosSeqEcho, 0.0);
     setDefaultString(ntControlMode, "manual");
     setDefaultString(ntInhibitReason, "");
+    setDefaultDouble(ntRosVelFiltRadPerS, 0.0);
+    setDefaultDouble(ntRosAccFiltRadPerS2, 0.0);
     setDefaultBoolean(ntSoftLimitClamped, false);
     setDefaultBoolean(ntSaturated, false);
     setDefaultDouble(ntOutVoltsRaw, 0.0);
@@ -499,6 +521,8 @@ public final class TunableJoint {
     rosPid.reset();
     prevSpVel = 0.0;
     lastDir = 0.0;
+    rosVelFiltRadPerS = 0.0;
+    rosAccFiltRadPerS2 = 0.0;
   }
 
   /** When not the selected joint: hold current angle and output 0V. */
@@ -595,6 +619,8 @@ public final class TunableJoint {
         testEnable.setBoolean(false);
       }
       setPos.setBoolean(false);
+      rosVelFiltRadPerS = 0.0;
+      rosAccFiltRadPerS2 = 0.0;
     }
 
     // Monitor-only: publish telemetry but never drive motors.
@@ -692,6 +718,35 @@ public final class TunableJoint {
       double desiredPos = rosPosRad.getDouble(0.0);
       double desiredVel = rosVelRadPerS.getDouble(0.0);
       double desiredAcc = rosAccRadPerS2.getDouble(0.0);
+
+      // Optional smoothing on vel/acc only (pos remains crisp for tracking)
+      double velTau = Math.max(0.0, rosVelTauS.getDouble(0.0));
+      double accTau = Math.max(0.0, rosAccTauS.getDouble(0.0));
+      if (velTau > 1e-6) {
+        double a = ArmConstants.DT / (velTau + ArmConstants.DT);
+        rosVelFiltRadPerS = rosVelFiltRadPerS + a * (desiredVel - rosVelFiltRadPerS);
+        desiredVel = rosVelFiltRadPerS;
+      } else {
+        rosVelFiltRadPerS = desiredVel;
+      }
+      if (accTau > 1e-6) {
+        double a = ArmConstants.DT / (accTau + ArmConstants.DT);
+        rosAccFiltRadPerS2 = rosAccFiltRadPerS2 + a * (desiredAcc - rosAccFiltRadPerS2);
+        desiredAcc = rosAccFiltRadPerS2;
+      } else {
+        rosAccFiltRadPerS2 = desiredAcc;
+      }
+      // Optional jerk limit (limit change in acceleration per cycle)
+      double jerk = Math.max(0.0, rosJerkLimitRadPerS3.getDouble(0.0));
+      if (jerk > 1e-6) {
+        double maxDelta = jerk * ArmConstants.DT;
+        double delta = desiredAcc - rosAccFiltRadPerS2;
+        if (delta > maxDelta) desiredAcc = rosAccFiltRadPerS2 + maxDelta;
+        else if (delta < -maxDelta) desiredAcc = rosAccFiltRadPerS2 - maxDelta;
+        rosAccFiltRadPerS2 = desiredAcc;
+      }
+      ntRosVelFiltRadPerS.setDouble(rosVelFiltRadPerS);
+      ntRosAccFiltRadPerS2.setDouble(rosAccFiltRadPerS2);
 
       // Clamp desired position to soft limits (local joint coords)
       double minRad = Math.toRadians(curMinDeg);
