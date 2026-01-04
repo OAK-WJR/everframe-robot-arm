@@ -68,7 +68,7 @@ public final class Constants {
     /** J2 defaults (can differ from J1). */
     public static final class J2Defaults {
       // Synced from web tuning
-      public static final double KS = 0.3, KV = 3.0, KA = 0.01;
+      public static final double KS = 0.2095, KV = 3.0, KA = 0.01;
       public static final double KG = 0.25;
       // Coupling defaults (edit if you want non-zero startup values)
       public static final double KG2 = 0.25;

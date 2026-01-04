@@ -305,6 +305,15 @@ public final class TunableJoint {
             : new SparkFlexConfig().idleMode(IdleMode.kBrake).voltageCompensation(ArmConstants.NOMINAL_VOLTAGE);
     cfg.encoder.positionConversionFactor(2.0 * Math.PI / gearRatio);
     cfg.encoder.velocityConversionFactor(2.0 * Math.PI / gearRatio / 60.0);
+    // IMPORTANT: Encoder position on Spark is updated via CAN status frames.
+    // If this is slow (e.g. ~20Hz), then AngleDeg will appear "stair-stepped" even if we publish at 100Hz,
+    // because enc.getPosition() won't change between frames and NT4 will suppress duplicates.
+    // Raise the primary encoder status frame rate so AngleDeg100 can actually update at ~100Hz.
+    cfg.signals.primaryEncoderPositionPeriodMs((int) Math.round(ArmConstants.NT_ANGLE_PERIOD_S * 1000.0));
+    cfg.signals.primaryEncoderPositionAlwaysOn(true);
+    // Velocity is optional but useful for diagnostics/FF; keep it reasonably fast without spamming CAN.
+    cfg.signals.primaryEncoderVelocityPeriodMs(20);
+    cfg.signals.primaryEncoderVelocityAlwaysOn(true);
     motor.configure(cfg, ResetMode.kResetSafeParameters, PersistMode.kNoPersistParameters);
 
     pid =
