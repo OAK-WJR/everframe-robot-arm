@@ -90,7 +90,7 @@ public final class TunableJoint {
   private final SparkBase motor;
   private final RelativeEncoder enc;
   private final ProfiledPIDController pid;
-  /** ROS Scheme B (external setpoint tracking): standard PID controller. */
+  /** ROS 轨迹追踪（Scheme 1）：对 RosPos 做 PI（D=0），并单独做速度误差反馈 + vel/acc 前馈。 */
   private final PIDController rosPid;
   private final double baseMinDeg;
   private final double baseMaxDeg;
@@ -128,6 +128,33 @@ public final class TunableJoint {
   private final NetworkTableEntry rosAccTauS;
   /** Limit d(acc)/dt (rad/s^3). 0 disables. */
   private final NetworkTableEntry rosJerkLimitRadPerS3;
+  // --- ROS position shaping (roboRIO-side, recommended) ---
+  /**
+   * If true: treat RosPos as sampled waypoints and generate a smooth reference trajectory (pos/vel/acc) on
+   * the roboRIO. This targets the "离散点阶跃" issue without relying on low-pass filtering.
+   */
+  private final NetworkTableEntry rosPosShaperEnable;
+  /** 2nd-order shaper natural frequency (rad/s). Higher = tighter tracking, less smoothing. */
+  private final NetworkTableEntry rosPosShaperWnRadPerS;
+  /** 2nd-order shaper damping ratio. 1.0 = critical damping. */
+  private final NetworkTableEntry rosPosShaperZeta;
+  /**
+   * If true: interpret RosAcc as a magnitude and apply the control "sign" (from vel/posErr). This is useful
+   * when upstream publishes magnitude-only / boxy acceleration.
+   */
+  private final NetworkTableEntry rosAccUseAbsSign;
+  // --- ROS command shaping (roboRIO-side, optional) ---
+  /** If true: jerk-limit a generated (vel,acc) command to avoid step/boxy RosAcc. */
+  private final NetworkTableEntry rosShapeEnable;
+  /** Acceleration limit for shaping (rad/s^2). */
+  private final NetworkTableEntry rosShapeAMaxRadPerS2;
+  /** Jerk limit for shaping (rad/s^3). */
+  private final NetworkTableEntry rosShapeJMaxRadPerS3;
+  // --- Ks gating (reduce low-speed dithering) ---
+  /** Minimum |velCmd| (rad/s) to apply Ks. */
+  private final NetworkTableEntry ksMinVelRadPerS;
+  /** Minimum |posErr| (deg) to apply Ks if vel is small. */
+  private final NetworkTableEntry ksMinErrDeg;
   /** If true: when a frame is late but still within RosValid timeout, extrapolate using last pos/vel/acc. */
   private final NetworkTableEntry rosPredictEnable;
   /** Max prediction horizon (seconds) to avoid runaway extrapolation. */
@@ -167,6 +194,16 @@ public final class TunableJoint {
   private final NetworkTableEntry ntRosVelFiltRadPerS, ntRosAccFiltRadPerS2;
   // ROS prediction telemetry
   private final NetworkTableEntry ntRosPredictDtS;
+  // ROS tracking debug breakdown (helps explain OutVoltsCmd shapes)
+  private final NetworkTableEntry ntActualVelRadPerS;
+  private final NetworkTableEntry ntActualVelFiltRadPerS;
+  private final NetworkTableEntry ntVelErrRadPerS;
+  private final NetworkTableEntry ntPidPosVolts;
+  private final NetworkTableEntry ntVelFbVolts;
+  private final NetworkTableEntry ntFfVolts;
+  /** Low-pass time constant for measured velocity used in vel error feedback (seconds). 0 disables. */
+  private final NetworkTableEntry rosActualVelTauS;
+  private double actualVelFiltRadPerS = 0.0;
   // Debug/diagnostics for "early stop" misconceptions
   private final NetworkTableEntry ntSoftLimitClamped; // boolean
   private final NetworkTableEntry ntSaturated; // boolean
@@ -201,11 +238,20 @@ public final class TunableJoint {
   // ROS watchdog state
   private long lastRosSeq = Long.MIN_VALUE;
   private double lastRosUpdateSec = -1.0;
-  private double rosVelFiltRadPerS = 0.0;
-  private double rosAccFiltRadPerS2 = 0.0;
   private double lastRosPosRad = 0.0;
   private double lastRosVelRadPerS = 0.0;
   private double lastRosAccRadPerS2 = 0.0;
+  // Optional smoothing state (only used when RosVelTauS/RosAccTauS > 0)
+  private double rosVelFiltRadPerS = 0.0;
+  private double rosAccFiltRadPerS2 = 0.0;
+  // Shaping state (roboRIO-side continuous vel/acc)
+  private double rosVelCmdRadPerS = 0.0;
+  private double rosAccCmdRadPerS2 = 0.0;
+  // Position shaper state (roboRIO-side continuous pos/vel/acc)
+  private boolean rosPosCmdInit = false;
+  private double rosPosCmdRad = 0.0;
+  private double rosPosCmdVelRadPerS = 0.0;
+  private double rosPosCmdAccRadPerS2 = 0.0;
 
   // sign selection hysteresis / thresholds (degrees)
   private static final double SIGN_VEL_EPS_RAD_PER_S = 1e-4;
@@ -326,7 +372,8 @@ public final class TunableJoint {
     pid.setTolerance(Math.toRadians(1.0));
     pid.reset(getAngleRad());
 
-    rosPid = new PIDController(defaults.kp, defaults.ki, defaults.kd, ArmConstants.DT);
+    // ROS 轨迹追踪：PI on position. (Velocity error feedback handled separately via curkD)
+    rosPid = new PIDController(defaults.kp, defaults.ki, 0.0, ArmConstants.DT);
     rosPid.setTolerance(Math.toRadians(1.0));
     rosPid.reset();
 
@@ -351,8 +398,17 @@ public final class TunableJoint {
     rosVelTauS = nt.getEntry("RosVelTauS");
     rosAccTauS = nt.getEntry("RosAccTauS");
     rosJerkLimitRadPerS3 = nt.getEntry("RosJerkLimitRadPerS3");
+    rosPosShaperEnable = nt.getEntry("RosPosShaperEnable");
+    rosPosShaperWnRadPerS = nt.getEntry("RosPosShaperWnRadPerS");
+    rosPosShaperZeta = nt.getEntry("RosPosShaperZeta");
+    rosAccUseAbsSign = nt.getEntry("RosAccUseAbsSign");
     rosPredictEnable = nt.getEntry("RosPredictEnable");
     rosPredictMaxS = nt.getEntry("RosPredictMaxS");
+    rosShapeEnable = nt.getEntry("RosShapeEnable");
+    rosShapeAMaxRadPerS2 = nt.getEntry("RosShapeAMaxRadPerS2");
+    rosShapeJMaxRadPerS3 = nt.getEntry("RosShapeJMaxRadPerS3");
+    ksMinVelRadPerS = nt.getEntry("KsMinVelRadPerS");
+    ksMinErrDeg = nt.getEntry("KsMinErrDeg");
 
     tuneLive = nt.getEntry("TuneLive");
     ntkP = nt.getEntry("kP");
@@ -392,6 +448,13 @@ public final class TunableJoint {
     ntRosVelFiltRadPerS = nt.getEntry("RosVelFiltRadPerS");
     ntRosAccFiltRadPerS2 = nt.getEntry("RosAccFiltRadPerS2");
     ntRosPredictDtS = nt.getEntry("RosPredictDtS");
+    ntActualVelRadPerS = nt.getEntry("ActualVelRadPerS");
+    ntActualVelFiltRadPerS = nt.getEntry("ActualVelFiltRadPerS");
+    ntVelErrRadPerS = nt.getEntry("VelErrRadPerS");
+    ntPidPosVolts = nt.getEntry("PidPosVolts");
+    ntVelFbVolts = nt.getEntry("VelFbVolts");
+    ntFfVolts = nt.getEntry("FfVolts");
+    rosActualVelTauS = nt.getEntry("RosActualVelTauS");
     ntSoftLimitClamped = nt.getEntry("SoftLimitClamped");
     ntSaturated = nt.getEntry("Saturated");
     ntOutVoltsRaw = nt.getEntry("OutVoltsRaw");
@@ -430,13 +493,26 @@ public final class TunableJoint {
     setDefaultDouble(rosSeq, 0.0);
     // Recommended starting range: 0.25~0.40s (avoid too small); watchdog floor is enforced in code.
     setDefaultDouble(rosTimeoutS, 0.30);
-    // Smoothing defaults: small filtering to remove “颗粒感”，但不明显拖慢位置跟踪
-    setDefaultDouble(rosVelTauS, 0.08);
-    setDefaultDouble(rosAccTauS, 0.08);
+    // Default: do NOT enable low-pass filtering.
+    setDefaultDouble(rosVelTauS, 0.0);
+    setDefaultDouble(rosAccTauS, 0.0);
     setDefaultDouble(rosJerkLimitRadPerS3, 0.0);
+    // Position shaper defaults: OFF (user prefers raw RosPos tracking without shaping).
+    setDefaultBoolean(rosPosShaperEnable, false);
+    setDefaultDouble(rosPosShaperWnRadPerS, 20.0);
+    setDefaultDouble(rosPosShaperZeta, 1.0);
+    // Acc sign mode default: robust with magnitude-only RosAcc
+    setDefaultBoolean(rosAccUseAbsSign, true);
     // Prediction defaults: bridge/网络偶发 40~50ms gap 时更丝滑
     setDefaultBoolean(rosPredictEnable, true);
     setDefaultDouble(rosPredictMaxS, 0.06);
+    // RoboRIO-side shaping defaults (start disabled; enable if RosAcc looks boxy)
+    setDefaultBoolean(rosShapeEnable, false);
+    setDefaultDouble(rosShapeAMaxRadPerS2, 3.0);
+    setDefaultDouble(rosShapeJMaxRadPerS3, 10.0);
+    // Ks gating defaults (helps low-speed stick-slip)
+    setDefaultDouble(ksMinVelRadPerS, 0.05);
+    setDefaultDouble(ksMinErrDeg, 0.20);
 
     curkP = defaults.kp;
     curkI = defaults.ki;
@@ -499,6 +575,14 @@ public final class TunableJoint {
     setDefaultDouble(ntRosVelFiltRadPerS, 0.0);
     setDefaultDouble(ntRosAccFiltRadPerS2, 0.0);
     setDefaultDouble(ntRosPredictDtS, 0.0);
+    setDefaultDouble(ntActualVelRadPerS, 0.0);
+    setDefaultDouble(ntActualVelFiltRadPerS, 0.0);
+    setDefaultDouble(ntVelErrRadPerS, 0.0);
+    setDefaultDouble(ntPidPosVolts, 0.0);
+    setDefaultDouble(ntVelFbVolts, 0.0);
+    setDefaultDouble(ntFfVolts, 0.0);
+    // Default: no measured-velocity low-pass filtering (keep it honest; smoothing is done via shaper).
+    setDefaultDouble(rosActualVelTauS, 0.0);
     setDefaultBoolean(ntSoftLimitClamped, false);
     setDefaultBoolean(ntSaturated, false);
     setDefaultDouble(ntOutVoltsRaw, 0.0);
@@ -548,12 +632,15 @@ public final class TunableJoint {
 
     // Apply to controller
     pid.setPID(curkP, curkI, curkD);
-    rosPid.setPID(curkP, curkI, curkD);
+    rosPid.setPID(curkP, curkI, 0.0);
     pid.setIntegratorRange(-curIMaxVolts, curIMaxVolts);
+    rosPid.setIntegratorRange(-curIMaxVolts, curIMaxVolts);
     if (curIZoneDeg <= 0.0) {
       pid.setIZone(Double.POSITIVE_INFINITY);
+      rosPid.setIZone(Double.POSITIVE_INFINITY);
     } else {
       pid.setIZone(Math.toRadians(curIZoneDeg));
+      rosPid.setIZone(Math.toRadians(curIZoneDeg));
     }
   }
 
@@ -567,11 +654,14 @@ public final class TunableJoint {
     rosPid.reset();
     prevSpVel = 0.0;
     lastDir = 0.0;
-    rosVelFiltRadPerS = 0.0;
-    rosAccFiltRadPerS2 = 0.0;
     lastRosPosRad = 0.0;
     lastRosVelRadPerS = 0.0;
     lastRosAccRadPerS2 = 0.0;
+    rosVelFiltRadPerS = 0.0;
+    rosAccFiltRadPerS2 = 0.0;
+    actualVelFiltRadPerS = 0.0;
+    rosVelCmdRadPerS = 0.0;
+    rosAccCmdRadPerS2 = 0.0;
   }
 
   /** When not the selected joint: hold current angle and output 0V. */
@@ -592,6 +682,7 @@ public final class TunableJoint {
       double rad = Math.toRadians(deg);
       enc.setPosition(rad * ioSign);
       pid.reset(rad);
+      rosPid.reset();
       prevSpVel = 0.0;
       lastDir = 0.0;
       targetDeg.setDouble(deg);
@@ -668,11 +759,18 @@ public final class TunableJoint {
         testEnable.setBoolean(false);
       }
       setPos.setBoolean(false);
-      rosVelFiltRadPerS = 0.0;
-      rosAccFiltRadPerS2 = 0.0;
       lastRosPosRad = rosPosRad.getDouble(0.0);
       lastRosVelRadPerS = rosVelRadPerS.getDouble(0.0);
       lastRosAccRadPerS2 = rosAccRadPerS2.getDouble(0.0);
+      rosVelFiltRadPerS = 0.0;
+      rosAccFiltRadPerS2 = 0.0;
+      actualVelFiltRadPerS = 0.0;
+      rosVelCmdRadPerS = 0.0;
+      rosAccCmdRadPerS2 = 0.0;
+      rosPosCmdInit = false;
+      rosPosCmdRad = 0.0;
+      rosPosCmdVelRadPerS = 0.0;
+      rosPosCmdAccRadPerS2 = 0.0;
     }
 
     // Monitor-only: publish telemetry but never drive motors.
@@ -768,66 +866,122 @@ public final class TunableJoint {
       ntRosValid.setBoolean(rosValid);
       ntRosAgeS.setDouble(age);
       ntRosSeqEcho.setDouble((double) lastRosSeq);
-      ntControlMode.setString("ros");
+      ntControlMode.setString("rosTrack");
 
-      // Use last sampled frame; optionally extrapolate across small gaps for smoothness.
-      double desiredPos = lastRosPosRad;
+      // Scheme 1: Trajectory tracking.
+      // Treat RosPos/RosVel/RosAcc as reference trajectory (NOT a final goal to replan).
+      double desiredPosRaw = lastRosPosRad;
       double desiredVel = lastRosVelRadPerS;
       double desiredAcc = lastRosAccRadPerS2;
+      // Optional prediction across small gaps for smoothness (uses last pos/vel/acc)
       double predDt = 0.0;
       if (rosValid && rosPredictEnable.getBoolean(true)) {
         double maxPred = Math.max(0.0, rosPredictMaxS.getDouble(0.06));
         predDt = MathUtil.clamp(age, 0.0, maxPred);
-        // Constant-acceleration extrapolation
-        desiredPos = desiredPos + desiredVel * predDt + 0.5 * desiredAcc * predDt * predDt;
+        desiredPosRaw = desiredPosRaw + desiredVel * predDt + 0.5 * desiredAcc * predDt * predDt;
         desiredVel = desiredVel + desiredAcc * predDt;
       }
       ntRosPredictDtS.setDouble(predDt);
 
-      // Optional smoothing on vel/acc only (pos remains crisp for tracking)
-      double velTau = Math.max(0.0, rosVelTauS.getDouble(0.0));
-      double accTau = Math.max(0.0, rosAccTauS.getDouble(0.0));
-      if (velTau > 1e-6) {
-        double a = ArmConstants.DT / (velTau + ArmConstants.DT);
-        rosVelFiltRadPerS = rosVelFiltRadPerS + a * (desiredVel - rosVelFiltRadPerS);
-        desiredVel = rosVelFiltRadPerS;
-      } else {
-        rosVelFiltRadPerS = desiredVel;
-      }
-      if (accTau > 1e-6) {
-        double a = ArmConstants.DT / (accTau + ArmConstants.DT);
-        rosAccFiltRadPerS2 = rosAccFiltRadPerS2 + a * (desiredAcc - rosAccFiltRadPerS2);
-        desiredAcc = rosAccFiltRadPerS2;
-      } else {
-        rosAccFiltRadPerS2 = desiredAcc;
-      }
-      // Optional jerk limit (limit change in acceleration per cycle)
-      double jerk = Math.max(0.0, rosJerkLimitRadPerS3.getDouble(0.0));
-      if (jerk > 1e-6) {
-        double maxDelta = jerk * ArmConstants.DT;
-        double delta = desiredAcc - rosAccFiltRadPerS2;
-        if (delta > maxDelta) desiredAcc = rosAccFiltRadPerS2 + maxDelta;
-        else if (delta < -maxDelta) desiredAcc = rosAccFiltRadPerS2 - maxDelta;
-        rosAccFiltRadPerS2 = desiredAcc;
-      }
-      ntRosVelFiltRadPerS.setDouble(rosVelFiltRadPerS);
-      ntRosAccFiltRadPerS2.setDouble(rosAccFiltRadPerS2);
-
       // Clamp desired position to soft limits (local joint coords)
       double minRad = Math.toRadians(curMinDeg);
       double maxRad = Math.toRadians(curMaxDeg);
-      double posClamped = MathUtil.clamp(desiredPos, minRad, maxRad);
-      boolean clamped = posClamped != desiredPos;
+      double posTargetRad = MathUtil.clamp(desiredPosRaw, minRad, maxRad);
+      boolean clamped = posTargetRad != desiredPosRaw;
       ntSoftLimitClamped.setBoolean(clamped);
-      // If clamped and command is trying to push further into the limit, zero vel/acc FF.
-      if (clamped) {
-        if ((posClamped <= minRad + 1e-9 && desiredVel < 0.0) || (posClamped >= maxRad - 1e-9 && desiredVel > 0.0)) {
-          desiredVel = 0.0;
-          desiredAcc = 0.0;
+
+      // === “平滑”位置整形器：把离散 RosPos 变成连续 pos/vel/acc 参考轨迹 ===
+      // NOTE: 不是低通滤波，而是生成一个动态系统的连续参考（更像“函数”轨迹）。
+      boolean posShape = rosPosShaperEnable.getBoolean(true);
+      double posRefRad = posTargetRad;
+      if (rosValid && posShape) {
+        double wn = Math.max(1e-3, rosPosShaperWnRadPerS.getDouble(20.0));
+        double zeta = Math.max(0.1, rosPosShaperZeta.getDouble(1.0));
+        if (!rosPosCmdInit) {
+          rosPosCmdInit = true;
+          rosPosCmdRad = posRefRad;
+          rosPosCmdVelRadPerS = desiredVel;
+          rosPosCmdAccRadPerS2 = 0.0;
+        }
+        double x1 = rosPosCmdRad;
+        double x2 = rosPosCmdVelRadPerS;
+        double x2dot = (-2.0 * zeta * wn * x2) - (wn * wn * (x1 - posRefRad));
+        double x1dot = x2;
+        x1 += ArmConstants.DT * x1dot;
+        x2 += ArmConstants.DT * x2dot;
+        x1 = MathUtil.clamp(x1, minRad, maxRad);
+        rosPosCmdRad = x1;
+        rosPosCmdVelRadPerS = x2;
+        rosPosCmdAccRadPerS2 = x2dot;
+        posRefRad = rosPosCmdRad;
+        desiredVel = rosPosCmdVelRadPerS;
+        desiredAcc = rosPosCmdAccRadPerS2;
+      } else {
+        rosPosCmdInit = false;
+      }
+
+      // (Optional) Legacy vel/acc filtering (default OFF). Skip when position shaper is enabled.
+      if (!posShape) {
+        double velTau = Math.max(0.0, rosVelTauS.getDouble(0.0));
+        double accTau = Math.max(0.0, rosAccTauS.getDouble(0.0));
+        if (velTau > 1e-6) {
+          double a = ArmConstants.DT / (velTau + ArmConstants.DT);
+          rosVelFiltRadPerS = rosVelFiltRadPerS + a * (desiredVel - rosVelFiltRadPerS);
+          desiredVel = rosVelFiltRadPerS;
+        } else {
+          rosVelFiltRadPerS = desiredVel;
+        }
+        if (accTau > 1e-6) {
+          double a = ArmConstants.DT / (accTau + ArmConstants.DT);
+          rosAccFiltRadPerS2 = rosAccFiltRadPerS2 + a * (desiredAcc - rosAccFiltRadPerS2);
+          desiredAcc = rosAccFiltRadPerS2;
+        } else {
+          rosAccFiltRadPerS2 = desiredAcc;
+        }
+        double jerk = Math.max(0.0, rosJerkLimitRadPerS3.getDouble(0.0));
+        if (jerk > 1e-6) {
+          double maxDelta = jerk * ArmConstants.DT;
+          double delta = desiredAcc - rosAccFiltRadPerS2;
+          if (delta > maxDelta) desiredAcc = rosAccFiltRadPerS2 + maxDelta;
+          else if (delta < -maxDelta) desiredAcc = rosAccFiltRadPerS2 - maxDelta;
+          rosAccFiltRadPerS2 = desiredAcc;
         }
       }
 
-      double goalDeg = Math.toDegrees(posClamped);
+      // Optional roboRIO-side vel/acc shaping (default OFF). Skip when position shaper is enabled.
+      if (!posShape && rosShapeEnable.getBoolean(false)) {
+        double aMax = Math.max(0.0, rosShapeAMaxRadPerS2.getDouble(0.0));
+        double jMax = Math.max(0.0, rosShapeJMaxRadPerS3.getDouble(0.0));
+        double accDes = (desiredVel - rosVelCmdRadPerS) / ArmConstants.DT;
+        if (aMax > 1e-6) accDes = MathUtil.clamp(accDes, -aMax, aMax);
+        if (jMax > 1e-6) {
+          double maxDa = jMax * ArmConstants.DT;
+          double da = MathUtil.clamp(accDes - rosAccCmdRadPerS2, -maxDa, maxDa);
+          rosAccCmdRadPerS2 += da;
+        } else {
+          rosAccCmdRadPerS2 = accDes;
+        }
+        rosVelCmdRadPerS += rosAccCmdRadPerS2 * ArmConstants.DT;
+        desiredVel = rosVelCmdRadPerS;
+        desiredAcc = rosAccCmdRadPerS2;
+      } else if (!posShape) {
+        rosVelCmdRadPerS = desiredVel;
+        rosAccCmdRadPerS2 = desiredAcc;
+      }
+      // If clamped and command is trying to push further into the limit, zero vel/acc FF.
+      if (clamped) {
+        if ((posRefRad <= minRad + 1e-9 && desiredVel < 0.0)
+            || (posRefRad >= maxRad - 1e-9 && desiredVel > 0.0)) {
+          desiredVel = 0.0;
+          desiredAcc = 0.0;
+          if (posShape) {
+            rosPosCmdVelRadPerS = 0.0;
+            rosPosCmdAccRadPerS2 = 0.0;
+          }
+        }
+      }
+
+      double goalDeg = Math.toDegrees(posRefRad);
       ntGoalDeg.setDouble(goalDeg);
       pubGoalDeg.set(goalDeg);
       ntGoalSource.setString("ros");
@@ -871,7 +1025,25 @@ public final class TunableJoint {
 
       // Control
       double selfRad = getAngleRad();
-      double posErr = posClamped - selfRad;
+      double actualVelRaw = enc.getVelocity() * ioSign; // rad/s
+      double actualVel = actualVelRaw;
+      // Optional filtering on measured velocity (helps low-speed "颗粒感" due to velocity quantization/noise)
+      double vTau = Math.max(0.0, rosActualVelTauS.getDouble(0.0));
+      if (vTau > 1e-6) {
+        double a = ArmConstants.DT / (vTau + ArmConstants.DT);
+        actualVelFiltRadPerS = actualVelFiltRadPerS + a * (actualVelRaw - actualVelFiltRadPerS);
+        actualVel = actualVelFiltRadPerS;
+      } else {
+        actualVelFiltRadPerS = actualVelRaw;
+      }
+      double posErr = posRefRad - selfRad;
+      double velErr = desiredVel - actualVel;
+      // Publish the reference (post prediction/soft-limit) as telemetry.
+      ntRosVelFiltRadPerS.setDouble(desiredVel);
+      ntRosAccFiltRadPerS2.setDouble(desiredAcc);
+      ntActualVelRadPerS.setDouble(actualVelRaw);
+      ntActualVelFiltRadPerS.setDouble(actualVel);
+      ntVelErrRadPerS.setDouble(velErr);
       double sign = computeSign(desiredVel, posErr);
 
       // Gravity feedforward uses actual angle (optionally composed with other)
@@ -884,14 +1056,29 @@ public final class TunableJoint {
         gVolts += curkG2 * Math.cos(selfRad + curkG2OtherScale * otherAngleRad);
       }
 
+      // --- Acc FF sign mode ---
+      // If using the position shaper, desiredAcc is already a physically signed value.
+      // Otherwise, upstream may publish magnitude-only acc; allow abs(acc)*sign mode to avoid the “末尾一拍”。
+      boolean useAbsSignAcc = (!posShape) && rosAccUseAbsSign.getBoolean(true) && !rosShapeEnable.getBoolean(false);
+      double accForFf = useAbsSignAcc ? (Math.abs(desiredAcc) * sign) : desiredAcc;
+
       double ffVolts =
-          curKs * sign
+          // Ks gating: avoid low-speed dithering when close to target
+          ((Math.abs(desiredVel) >= ksMinVelRadPerS.getDouble(0.05)
+                  || Math.abs(Math.toDegrees(posErr)) >= ksMinErrDeg.getDouble(0.20))
+              ? (curKs * sign)
+              : 0.0)
               + gVolts
               + curKv * desiredVel
-              + curKa * Math.abs(desiredAcc) * sign;
+              + curKa * accForFf;
 
-      double pidVolts = rosPid.calculate(selfRad, posClamped);
-      double raw = pidVolts + ffVolts;
+      // PI on position + velocity error feedback (use curkD as kD_vel in ROS mode)
+      double pidPosVolts = rosPid.calculate(selfRad, posRefRad);
+      double velFbVolts = curkD * velErr;
+      ntPidPosVolts.setDouble(pidPosVolts);
+      ntVelFbVolts.setDouble(velFbVolts);
+      ntFfVolts.setDouble(ffVolts);
+      double raw = pidPosVolts + velFbVolts + ffVolts;
       ntOutVoltsRaw.setDouble(raw);
       boolean saturated = Math.abs(raw) > curMaxVolts + 1e-9;
       ntSaturated.setBoolean(saturated);

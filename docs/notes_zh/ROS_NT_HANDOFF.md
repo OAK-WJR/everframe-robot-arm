@@ -48,11 +48,12 @@ python3 -m pip install -U pyntcore
 - 每一帧必须同时写入 `pos/vel/acc/seq`
 - `RosSeq` 必须每帧递增（watchdog 只看 seq 变化）
 
-## roboRIO 侧已做的配合修改（你现在仓库的状态）
+## roboRIO 侧控制方式（当前：轨迹追踪模式）
 
-- `TunableJoint` 支持 Scheme B：
-  - `rosPid` 用 `RosPosRad` 做 PID 位置跟踪
-  - `RosVelRadPerS/RosAccRadPerS2` 只用于 FF（Kv/Ka/Ks 方向）
+- `TunableJoint` 轨迹追踪：
+  - `RosPosRad` 用作参考位置（PI 位置误差）
+  - `RosVelRadPerS` 用作速度误差反馈 + Kv/Ks
+  - `RosAccRadPerS2` 用作 Ka 前馈
   - watchdog：`timeout = max(RosTimeoutS, 0.20)`
 - 高频遥测使用 NT4 Publisher periodic=0.02：
   - `NowSec/AngleDeg/GoalDeg/OutVoltsCmd/Enabled`

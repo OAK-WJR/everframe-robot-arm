@@ -1,6 +1,6 @@
 # ROS 控制算法（Scheme B：外部轨迹跟踪）— 仅控制算法说明
 
-本文只描述 **roboRIO 侧 TunableJoint 的 ROS 控制算法**，不包含 UI/调参/机械结构细节。
+本文只描述 **roboRIO 侧 TunableJoint 的 ROS 控制算法（轨迹追踪模式）**，不包含 UI/调参/机械结构细节。
 
 ## 目标
 
@@ -8,16 +8,16 @@
 - roboRIO 每 20ms：
   - 读 ROS setpoint
   - 做 watchdog（超时强制 0V）
-  - 用 **PID(位置误差)** + **FF(vel/acc/ks/kG)** 计算电压并输出
+  - 用 **PI(位置误差)** + **速度误差反馈** + **FF(vel/acc/ks/kG)** 计算电压并输出
 
 ## 输入（Jetson -> roboRIO，NetworkTables）
 
 均在 `Arm/Jx/` 下：
 
 - `RosEnable`（bool）：是否请求 ROS 控制
-- `RosPosRad`（double）：期望关节角（rad）。**这是 PID 的主目标**
-- `RosVelRadPerS`（double）：期望角速度（rad/s）。**只用于 FF 的 Kv 与 Ks 方向选择**
-- `RosAccRadPerS2`（double）：期望角加速度（rad/s^2）。**只用于 FF 的 Ka**
+- `RosPosRad`（double）：期望关节角（rad）。**作为参考轨迹位置**
+- `RosVelRadPerS`（double）：期望角速度（rad/s）。**用于速度误差反馈 + Kv/Ks**
+- `RosAccRadPerS2`（double）：期望角加速度（rad/s^2）。**用于 Ka**
 - `RosSeq`（int64 优先；double 兼容）：每帧递增的序号，用于 watchdog 判断“是否有新帧”
 - `RosTimeoutS`（double）：允许的最大“无新帧时间”。建议 0.25～0.40s
 
@@ -42,7 +42,7 @@
 - `RosValid`（bool）：`Enabled && age<=timeout`
 - `RosAgeS`（double）：距离上次 RosSeq 更新的时间（秒）
 - `RosSeqEcho`（double）：roboRIO 侧看到的 seq（用于对齐 Jetson 侧）
-- `ControlMode`（string）：`ros`/`manual`/`sine`/`inactive`/`monitor`
+- `ControlMode`（string）：`rosTrack`/`manual`/`sine`/`inactive`/`monitor`
 - `InhibitReason`（string）：为什么输出被强制 0V（如 `disabled`/`rosTimeout`/`maxVolts=0`/`monitorOnly`/`inactive`）
 - `OutVoltsCmd`（double）：**最终 applied** 电压（已过所有门控/限幅）
 - `OutVoltsRaw`（double）：限幅前电压（用于判断饱和）
@@ -73,5 +73,20 @@
 
 - 如果已经 clamp 到最小角，但 ROS 仍给负速度（继续往小角推），则将 vel/acc FF 置 0
 - clamp 到最大角同理
+
+### 3) 轨迹追踪控制律（Scheme 1）
+
+记：
+- 参考轨迹：\(p_r, v_r, a_r\)（来自 ROS）
+- 实际测量：\(p, v\)（来自编码器）
+
+电压命令（概念式）：
+\[
+u = PI(p_r - p) + k_{D\_vel}(v_r - v) + (k_s\cdot sign + k_g\cos(\theta) + k_v v_r + k_a a_r)
+\]
+
+其中：
+- \(PI\) 使用 `kP/kI`（`kD` 在 ROS 模式下作为速度误差反馈系数使用）
+- `ks/kg/kv/ka` 仍是电压前馈项
 
 
