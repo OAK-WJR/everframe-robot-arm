@@ -18,6 +18,8 @@ public final class Constants {
     public static final double NOMINAL_VOLTAGE = 12.0;
     /** NT4 publisher periodic for high-frequency telemetry (seconds). */
     public static final double NT_FAST_PERIOD_S = 0.02;
+    /** Even faster telemetry period for AngleDeg/NowSec (seconds). Control loop is still 20ms. */
+    public static final double NT_ANGLE_PERIOD_S = 0.01;
 
     public enum RevController {
       FLEX,
@@ -66,7 +68,7 @@ public final class Constants {
     /** J2 defaults (can differ from J1). */
     public static final class J2Defaults {
       // Synced from web tuning
-      public static final double KS = 0.2095, KV = 3.0, KA = 0.01;
+      public static final double KS = 0.3, KV = 3.0, KA = 0.01;
       public static final double KG = 0.25;
       // Coupling defaults (edit if you want non-zero startup values)
       public static final double KG2 = 0.25;

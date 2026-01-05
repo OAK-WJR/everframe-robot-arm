@@ -16,6 +16,7 @@ import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.networktables.BooleanPublisher;
 import edu.wpi.first.networktables.DoublePublisher;
+import edu.wpi.first.networktables.IntegerPublisher;
 import edu.wpi.first.networktables.IntegerSubscriber;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
@@ -127,6 +128,10 @@ public final class TunableJoint {
   private final NetworkTableEntry rosAccTauS;
   /** Limit d(acc)/dt (rad/s^3). 0 disables. */
   private final NetworkTableEntry rosJerkLimitRadPerS3;
+  /** If true: when a frame is late but still within RosValid timeout, extrapolate using last pos/vel/acc. */
+  private final NetworkTableEntry rosPredictEnable;
+  /** Max prediction horizon (seconds) to avoid runaway extrapolation. */
+  private final NetworkTableEntry rosPredictMaxS;
 
   // Tunables
   private final NetworkTableEntry tuneLive;
@@ -160,6 +165,8 @@ public final class TunableJoint {
   private final NetworkTableEntry ntInhibitReason;
   // ROS smoothing telemetry
   private final NetworkTableEntry ntRosVelFiltRadPerS, ntRosAccFiltRadPerS2;
+  // ROS prediction telemetry
+  private final NetworkTableEntry ntRosPredictDtS;
   // Debug/diagnostics for "early stop" misconceptions
   private final NetworkTableEntry ntSoftLimitClamped; // boolean
   private final NetworkTableEntry ntSaturated; // boolean
@@ -168,7 +175,11 @@ public final class TunableJoint {
 
   // NT4 high-rate publishers (50Hz). Entry publishing often defaults to ~0.1s.
   private final DoublePublisher pubNowSec, pubAngleDeg, pubGoalDeg, pubOutVoltsCmd;
+  // Dedicated 100Hz telemetry topics (avoid being “dragged” by subscriber periodic / other publishers)
+  private final DoublePublisher pubNowSec100, pubAngleDeg100;
+  private final IntegerPublisher pubAngleSeq100;
   private final BooleanPublisher pubEnabled;
+  private long angleSeq100 = 0;
 
   // Current applied values
   private double curkP, curkI, curkD;
@@ -192,6 +203,9 @@ public final class TunableJoint {
   private double lastRosUpdateSec = -1.0;
   private double rosVelFiltRadPerS = 0.0;
   private double rosAccFiltRadPerS2 = 0.0;
+  private double lastRosPosRad = 0.0;
+  private double lastRosVelRadPerS = 0.0;
+  private double lastRosAccRadPerS2 = 0.0;
 
   // sign selection hysteresis / thresholds (degrees)
   private static final double SIGN_VEL_EPS_RAD_PER_S = 1e-4;
@@ -228,6 +242,17 @@ public final class TunableJoint {
   /** Read-only: whether an external client is requesting ROS control for this joint. */
   public boolean isRosEnableRequested() {
     return rosEnable.getBoolean(false);
+  }
+
+  /** 100Hz telemetry hook (called from ArmSubsystem Notifier). */
+  public void publishFastTelemetry(double nowSec) {
+    // Legacy topics (still updated here)
+    pubNowSec.set(nowSec);
+    pubAngleDeg.set(getAngleDeg());
+    // Dedicated 100Hz topics (proof-of-rate)
+    pubNowSec100.set(nowSec);
+    pubAngleDeg100.set(getAngleDeg());
+    pubAngleSeq100.set(++angleSeq100);
   }
 
   private double computeSign(double velRadPerS, double posErrRad) {
@@ -317,6 +342,8 @@ public final class TunableJoint {
     rosVelTauS = nt.getEntry("RosVelTauS");
     rosAccTauS = nt.getEntry("RosAccTauS");
     rosJerkLimitRadPerS3 = nt.getEntry("RosJerkLimitRadPerS3");
+    rosPredictEnable = nt.getEntry("RosPredictEnable");
+    rosPredictMaxS = nt.getEntry("RosPredictMaxS");
 
     tuneLive = nt.getEntry("TuneLive");
     ntkP = nt.getEntry("kP");
@@ -355,13 +382,19 @@ public final class TunableJoint {
     ntInhibitReason = nt.getEntry("InhibitReason");
     ntRosVelFiltRadPerS = nt.getEntry("RosVelFiltRadPerS");
     ntRosAccFiltRadPerS2 = nt.getEntry("RosAccFiltRadPerS2");
+    ntRosPredictDtS = nt.getEntry("RosPredictDtS");
     ntSoftLimitClamped = nt.getEntry("SoftLimitClamped");
     ntSaturated = nt.getEntry("Saturated");
     ntOutVoltsRaw = nt.getEntry("OutVoltsRaw");
     ntNowSec = nt.getEntry("NowSec");
 
-    pubNowSec = nt.getDoubleTopic("NowSec").publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
-    pubAngleDeg = nt.getDoubleTopic("AngleDeg").publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
+    // Angle/NowSec use a faster publisher period; actual "update rate" depends on how often we call set().
+    pubNowSec = nt.getDoubleTopic("NowSec").publish(PubSubOption.periodic(ArmConstants.NT_ANGLE_PERIOD_S));
+    pubAngleDeg = nt.getDoubleTopic("AngleDeg").publish(PubSubOption.periodic(ArmConstants.NT_ANGLE_PERIOD_S));
+    // Dedicated 100Hz topics (no other code path should write these)
+    pubNowSec100 = nt.getDoubleTopic("NowSec100").publish(PubSubOption.periodic(ArmConstants.NT_ANGLE_PERIOD_S));
+    pubAngleDeg100 = nt.getDoubleTopic("AngleDeg100").publish(PubSubOption.periodic(ArmConstants.NT_ANGLE_PERIOD_S));
+    pubAngleSeq100 = nt.getIntegerTopic("AngleSeq100").publish(PubSubOption.periodic(ArmConstants.NT_ANGLE_PERIOD_S));
     pubGoalDeg = nt.getDoubleTopic("GoalDeg").publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
     pubOutVoltsCmd =
         nt.getDoubleTopic("OutVoltsCmd").publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
@@ -392,6 +425,9 @@ public final class TunableJoint {
     setDefaultDouble(rosVelTauS, 0.08);
     setDefaultDouble(rosAccTauS, 0.08);
     setDefaultDouble(rosJerkLimitRadPerS3, 0.0);
+    // Prediction defaults: bridge/网络偶发 40~50ms gap 时更丝滑
+    setDefaultBoolean(rosPredictEnable, true);
+    setDefaultDouble(rosPredictMaxS, 0.06);
 
     curkP = defaults.kp;
     curkI = defaults.ki;
@@ -453,6 +489,7 @@ public final class TunableJoint {
     setDefaultString(ntInhibitReason, "");
     setDefaultDouble(ntRosVelFiltRadPerS, 0.0);
     setDefaultDouble(ntRosAccFiltRadPerS2, 0.0);
+    setDefaultDouble(ntRosPredictDtS, 0.0);
     setDefaultBoolean(ntSoftLimitClamped, false);
     setDefaultBoolean(ntSaturated, false);
     setDefaultDouble(ntOutVoltsRaw, 0.0);
@@ -523,6 +560,9 @@ public final class TunableJoint {
     lastDir = 0.0;
     rosVelFiltRadPerS = 0.0;
     rosAccFiltRadPerS2 = 0.0;
+    lastRosPosRad = 0.0;
+    lastRosVelRadPerS = 0.0;
+    lastRosAccRadPerS2 = 0.0;
   }
 
   /** When not the selected joint: hold current angle and output 0V. */
@@ -621,6 +661,9 @@ public final class TunableJoint {
       setPos.setBoolean(false);
       rosVelFiltRadPerS = 0.0;
       rosAccFiltRadPerS2 = 0.0;
+      lastRosPosRad = rosPosRad.getDouble(0.0);
+      lastRosVelRadPerS = rosVelRadPerS.getDouble(0.0);
+      lastRosAccRadPerS2 = rosAccRadPerS2.getDouble(0.0);
     }
 
     // Monitor-only: publish telemetry but never drive motors.
@@ -706,6 +749,10 @@ public final class TunableJoint {
       if (seq != lastRosSeq) {
         lastRosSeq = seq;
         lastRosUpdateSec = nowSec;
+        // Sample a coherent frame (pos/vel/acc) only when seq changes.
+        lastRosPosRad = rosPosRad.getDouble(0.0);
+        lastRosVelRadPerS = rosVelRadPerS.getDouble(0.0);
+        lastRosAccRadPerS2 = rosAccRadPerS2.getDouble(0.0);
       }
       double age = (lastRosUpdateSec < 0.0) ? 1e9 : (nowSec - lastRosUpdateSec);
       boolean rosValid = enabled && age <= timeout;
@@ -714,10 +761,19 @@ public final class TunableJoint {
       ntRosSeqEcho.setDouble((double) lastRosSeq);
       ntControlMode.setString("ros");
 
-      // Read commanded setpoints
-      double desiredPos = rosPosRad.getDouble(0.0);
-      double desiredVel = rosVelRadPerS.getDouble(0.0);
-      double desiredAcc = rosAccRadPerS2.getDouble(0.0);
+      // Use last sampled frame; optionally extrapolate across small gaps for smoothness.
+      double desiredPos = lastRosPosRad;
+      double desiredVel = lastRosVelRadPerS;
+      double desiredAcc = lastRosAccRadPerS2;
+      double predDt = 0.0;
+      if (rosValid && rosPredictEnable.getBoolean(true)) {
+        double maxPred = Math.max(0.0, rosPredictMaxS.getDouble(0.06));
+        predDt = MathUtil.clamp(age, 0.0, maxPred);
+        // Constant-acceleration extrapolation
+        desiredPos = desiredPos + desiredVel * predDt + 0.5 * desiredAcc * predDt * predDt;
+        desiredVel = desiredVel + desiredAcc * predDt;
+      }
+      ntRosPredictDtS.setDouble(predDt);
 
       // Optional smoothing on vel/acc only (pos remains crisp for tracking)
       double velTau = Math.max(0.0, rosVelTauS.getDouble(0.0));

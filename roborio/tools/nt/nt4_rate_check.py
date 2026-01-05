@@ -43,10 +43,13 @@ def main() -> int:
 
     keys = [
         ("NowSec", jt.getDoubleTopic("NowSec").subscribe(float("nan"), opt)),
+        ("NowSec100", jt.getDoubleTopic("NowSec100").subscribe(float("nan"), opt)),
         ("AngleDeg", jt.getDoubleTopic("AngleDeg").subscribe(float("nan"), opt)),
+        ("AngleDeg100", jt.getDoubleTopic("AngleDeg100").subscribe(float("nan"), opt)),
         ("GoalDeg", jt.getDoubleTopic("GoalDeg").subscribe(float("nan"), opt)),
         ("OutVoltsCmd", jt.getDoubleTopic("OutVoltsCmd").subscribe(float("nan"), opt)),
         ("RosSeq", jt.getDoubleTopic("RosSeq").subscribe(float("nan"), opt)),
+        ("AngleSeq100", jt.getIntegerTopic("AngleSeq100").subscribe(0, opt)),
     ]
 
     # warmup

@@ -4,6 +4,7 @@ import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.BooleanPublisher;
 import edu.wpi.first.networktables.PubSubOption;
+import edu.wpi.first.wpilibj.Notifier;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -23,6 +24,22 @@ public class ArmSubsystem extends SubsystemBase {
           .getTable("Arm")
           .getBooleanTopic("Enabled")
           .publish(PubSubOption.periodic(ArmConstants.NT_FAST_PERIOD_S));
+
+  /** 100Hz telemetry publisher (AngleDeg/NowSec). Control loop remains 20ms. */
+  private final Notifier fastTelemetryNotifier;
+
+  public ArmSubsystem() {
+    fastTelemetryNotifier =
+        new Notifier(
+            () -> {
+              double now = Timer.getFPGATimestamp();
+              j1.publishFastTelemetry(now);
+              j2.publishFastTelemetry(now);
+              if (j3 != null) j3.publishFastTelemetry(now);
+            });
+    // Start 100Hz telemetry. This does NOT drive motors; it only publishes AngleDeg/NowSec.
+    fastTelemetryNotifier.startPeriodic(ArmConstants.NT_ANGLE_PERIOD_S);
+  }
 
   private final TunableJoint j1 =
       new TunableJoint(
