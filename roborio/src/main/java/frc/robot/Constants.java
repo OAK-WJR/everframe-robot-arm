@@ -42,7 +42,7 @@ public final class Constants {
       /** If true: use global angle for kG*cos(angle). */
       public static final boolean USE_GLOBAL_ANGLE_FOR_GRAVITY = false;
       public static final double KP = 35.0, KI = 100.0, KD = 1.2;
-      public static final double MAX_VOLTS = 1.0;
+      public static final double MAX_VOLTS = 2.0;
       public static final double IZONE_DEG = 0.5;
       public static final double I_MAX_VOLTS = 1.0;
       public static final double MAX_VEL = 6.0, MAX_ACC = 12.0; // rad/s, rad/s^2
@@ -118,8 +118,8 @@ public final class Constants {
       public static final String NAME = "J2";
       public static final int CAN_ID = 3;
       public static final double GEAR_RATIO = 100.0; // motor:joint
-      public static final double MIN_DEG = -25.0;
-      public static final double MAX_DEG = 215.0;
+      public static final double MIN_DEG = -0.0;
+      public static final double MAX_DEG = 180.0;
       public static final RevController CONTROLLER = RevController.FLEX;
       /** Requested: invert J2 motor output and encoder sign. */
       public static final boolean INVERTED = true;
