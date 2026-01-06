@@ -1,0 +1,18 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+  <arg name="xyz_topic" default="/arm_xyz_goal" />
+
+  <!-- Start MoveIt demo (provides /compute_ik service) -->
+  <include file="$(find robotics_arm_moveit_config)/launch/demo.launch">
+    <arg name="use_rviz" value="true" />
+  </include>
+
+  <!-- Bridge xyz -> IK -> NetworkTables -->
+  <include file="$(find arm_nt_bridge)/launch/xyz_to_arm_nt.launch">
+    <arg name="server_ip" value="$(arg server_ip)" />
+    <arg name="xyz_topic" value="$(arg xyz_topic)" />
+  </include>
+</launch>
+
+
+

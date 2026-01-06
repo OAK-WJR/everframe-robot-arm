@@ -1,0 +1,155 @@
+<?xml version="1.0" ?>
+<robot name="very" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:include filename="$(find robotics_arm_urdf)/urdf/materials.xacro" />
+<xacro:include filename="$(find robotics_arm_urdf)/urdf/very.trans" />
+<xacro:include filename="$(find robotics_arm_urdf)/urdf/very.gazebo" />
+
+<!-- Dummy root link to satisfy KDL (root link cannot have inertia) -->
+<link name="base_root"/>
+
+<link name="base_link">
+  <inertial>
+    <origin xyz="1.786500008006684e-05 0.00012165639228690033 0.06699175592851545" rpy="0 0 0"/>
+    <mass value="535.8223914164653"/>
+    <inertia ixx="24.551577" iyy="24.553882" izz="47.222961" ixy="1e-05" iyz="-0.008012" ixz="-0.000609"/>
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://robotics_arm_urdf/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://robotics_arm_urdf/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<joint name="base_root_to_base_link" type="fixed">
+  <origin xyz="0 0 0" rpy="0 0 0"/>
+  <parent link="base_root"/>
+  <child link="base_link"/>
+</joint>
+
+<link name="J2_1">
+  <inertial>
+    <origin xyz="-0.016991904377805584 -2.479257345889066e-07 0.05564737429303507" rpy="0 0 0"/>
+    <mass value="8.725021578617188"/>
+    <inertia ixx="0.020867" iyy="0.01847" izz="0.020756" ixy="0.0" iyz="0.0" ixz="0.001526"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.00014 -0.006362 -0.259291" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://robotics_arm_urdf/meshes/J2_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.00014 -0.006362 -0.259291" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://robotics_arm_urdf/meshes/J2_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="J3_1">
+  <inertial>
+    <origin xyz="0.055032013453155115 -0.27922124726006753 1.224065103722083e-07" rpy="0 0 0"/>
+    <mass value="11.34516891418952"/>
+    <inertia ixx="0.466304" iyy="0.011006" izz="0.469118" ixy="0.033102" iyz="0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.01486 -0.006362 -0.331291" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://robotics_arm_urdf/meshes/J3_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.01486 -0.006362 -0.331291" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://robotics_arm_urdf/meshes/J3_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="J4_1">
+  <inertial>
+    <origin xyz="-0.014361359821615675 -0.16199153769784758 1.2240513108663365e-07" rpy="0 0 0"/>
+    <mass value="5.126352738450512"/>
+    <inertia ixx="0.073281" iyy="0.006158" izz="0.077483" ixy="0.007898" iyz="-0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.05186 0.493638 -0.331291" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://robotics_arm_urdf/meshes/J4_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.05186 0.493638 -0.331291" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://robotics_arm_urdf/meshes/J4_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="J5_1">
+  <inertial>
+    <origin xyz="-0.0331204755365671 0.04815190305946215 1.2240129576568393e-07" rpy="0 0 0"/>
+    <mass value="1.4049124718717072"/>
+    <inertia ixx="0.002823" iyy="0.000321" izz="0.002868" ixy="9.3e-05" iyz="0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.003859 0.798113 -0.331291" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://robotics_arm_urdf/meshes/J5_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.003859 0.798113 -0.331291" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://robotics_arm_urdf/meshes/J5_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<!-- 给 MoveIt/Servo 明确的关节上下限与速度上限，避免数值发散 -->
+<joint name="joint1" type="revolute">
+  <origin xyz="-0.00014 0.006362 0.259291" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="J2_1"/>
+  <axis xyz="0.0 0.0 1.0"/>
+  <limit lower="-3.14159" upper="3.14159" effort="10.0" velocity="2.0"/>
+</joint>
+
+<joint name="joint2" type="revolute">
+  <origin xyz="0.015 0.0 0.072" rpy="0 0 0"/>
+  <parent link="J2_1"/>
+  <child link="J3_1"/>
+  <axis xyz="-1.0 -0.0 0.0"/>
+  <limit lower="-3.14159" upper="3.14159" effort="10.0" velocity="2.0"/>
+</joint>
+
+<joint name="joint3" type="revolute">
+  <origin xyz="0.037 -0.5 0.0" rpy="0 0 0"/>
+  <parent link="J3_1"/>
+  <child link="J4_1"/>
+  <axis xyz="-1.0 -0.0 0.0"/>
+  <limit lower="-3.14159" upper="3.14159" effort="10.0" velocity="2.0"/>
+</joint>
+
+<joint name="joint4" type="revolute">
+  <origin xyz="-0.048001 -0.304475 0.0" rpy="0 0 0"/>
+  <parent link="J4_1"/>
+  <child link="J5_1"/>
+  <axis xyz="1.0 0.0 -0.0"/>
+  <limit lower="-3.14159" upper="3.14159" effort="10.0" velocity="2.0"/>
+</joint>
+
+</robot>

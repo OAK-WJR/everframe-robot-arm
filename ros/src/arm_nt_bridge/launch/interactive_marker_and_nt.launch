@@ -1,0 +1,23 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+
+  <!-- 这个 marker 会实时发布 xyz 到 /arm_xyz_goal -->
+  <node pkg="arm_nt_bridge" type="interactive_xyz_marker.py" name="interactive_xyz_marker" output="screen">
+    <param name="frame_id" value="world" />
+    <param name="topic" value="/arm_xyz_goal" />
+    <rosparam param="initial_xyz">[0.2, 0.0, 0.2]</rosparam>
+  </node>
+
+  <!-- xyz -> IK -> NetworkTables -->
+  <node pkg="arm_nt_bridge" type="xyz_to_arm_nt.py" name="xyz_to_arm_nt" output="screen">
+    <param name="server_ip" value="$(arg server_ip)" />
+    <param name="xyz_topic" value="/arm_xyz_goal" />
+    <param name="planning_frame" value="world" />
+    <param name="group_name" value="arm" />
+    <param name="ik_link" value="J5_1" />
+    <param name="active_joint" value="Both" />
+  </node>
+</launch>
+
+
+

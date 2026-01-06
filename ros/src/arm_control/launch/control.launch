@@ -1,0 +1,11 @@
+<launch>
+  <!-- load controller params -->
+  <rosparam file="$(find arm_control)/config/controllers.yaml" command="load"/>
+
+  <!-- your hardware node (RobotHW + controller_manager loop) -->
+  <node pkg="arm_control" type="arm_hw_node" name="arm_hw" output="screen"/>
+
+  <!-- spawn controllers -->
+  <node pkg="controller_manager" type="spawner" name="spawner"
+        args="joint_state_controller arm_controller" output="screen"/>
+</launch>

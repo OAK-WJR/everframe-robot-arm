@@ -1,0 +1,65 @@
+###############################################
+# MoveIt Servo parameters (robotics_arm)
+###############################################
+# This file is loaded into the servo_server node namespace.
+
+# Robot environment
+use_gazebo: false
+
+## Properties of incoming commands
+command_in_type: "speed_units"   # keep "speed_units" for Twist/JointJog in real units
+scale:
+  # 画笛卡尔图形时需要更大的线速度响应，否则 delta_twist_cmds 会非常“软”导致走不动
+  linear: 1.0
+  rotational: 0.2
+  joint: 1.2
+low_pass_filter_coeff: 3.0
+
+## Properties of outgoing commands
+publish_period: 0.02             # 50Hz
+low_latency_mode: false
+
+# Use JointTrajectory output so Servo provides positions + velocities (+ accelerations).
+# This lets the NT4 bridge forward real vel/acc instead of "guessing" via finite differences.
+command_out_type: trajectory_msgs/JointTrajectory
+publish_joint_positions: true
+publish_joint_velocities: true
+publish_joint_accelerations: true
+
+## MoveIt properties
+move_group_name: arm
+planning_frame: base_link
+
+## Frames
+ee_frame_name: J5_1
+robot_link_command_frame: base_link
+
+## Stopping behavior
+incoming_command_timeout: 0.5   # 更长超时，减少误判 stale 导致的停止（画方形时需要）
+num_outgoing_halt_msgs_to_publish: 4
+
+## Singularity / joint limits
+lower_singularity_threshold: 10   # 降低阈值，减少误判singularity（4-DOF arm容易触发）
+hard_stop_singularity_threshold: 20   # 降低hard stop阈值
+joint_limit_margin: 0.1
+
+## Topics
+cartesian_command_in_topic: delta_twist_cmds
+joint_command_in_topic: delta_joint_cmds
+joint_topic: /joint_states
+status_topic: status
+# IMPORTANT: use a relative topic name so each servo_server instance publishes within its own
+# namespace (e.g. /servo_server/joint_position_cmd). This prevents collisions with any stray
+# debug instance like /servo_server_dbg.
+command_out_topic: joint_trajectory_cmd
+
+## Collision checking
+check_collisions: false   # disable first to avoid servo_server startup crashes / heavy CPU on embedded
+collision_check_rate: 30
+collision_check_type: threshold_distance
+self_collision_proximity_threshold: 0.01
+scene_collision_proximity_threshold: 0.05
+collision_distance_safety_factor: 1000
+min_allowable_collision_distance: 0.01
+
+

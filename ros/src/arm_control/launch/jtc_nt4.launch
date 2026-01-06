@@ -1,0 +1,114 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+  <arg name="control_rate" default="100.0" />
+  <arg name="nt_rate" default="100.0" />
+  <arg name="ros_timeout_s" default="0.25" />
+  <arg name="catkin_ws" default="$(optenv CATKIN_WS /home/jetson/catkin_ws)" />
+  <!-- Choose which signal to bridge to NT4 Scheme B:
+       - jtc_command: JTC input trajectory stream (what we feed into JTC)
+       - jtc_state: JTC interpolated desired pos/vel/acc
+       - arm_hw_command: RobotHW final position command; vel/acc are estimated if missing -->
+  <!-- Recommended: jtc_state for smooth 100Hz interpolated output from JTC.
+       Use servo only for debugging Servo's raw output. -->
+  <arg name="cmd_source" default="jtc_state" />
+  <!-- When cmd_source=jtc_state, this controls /arm_controller/state publish rate (Hz). -->
+  <arg name="jtc_state_publish_rate" default="100" />
+
+  <!-- robot_description is required by JointTrajectoryController (joint limits/URDF parsing) -->
+  <param name="robot_description" command="xacro $(find robotics_arm_urdf)/urdf/very.xacro" />
+
+  <!-- load controller params -->
+  <rosparam file="$(find arm_control)/config/controllers.yaml" command="load"/>
+  <!-- Allow launch-time override (useful for A/B testing); controller reads this at startup -->
+  <param name="arm_controller/state_publish_rate" value="$(arg jtc_state_publish_rate)" />
+
+  <!-- C++ NT4 bridge (no Python ntcore/pyntcore):
+       - Publishes /arm_hw/nt_state from AngleDeg (plus joint4=0)
+       - Writes Scheme B RosPos/Vel/Acc/Seq from selected cmd_source -->
+  <node pkg="arm_nt4_bridge" type="arm_nt4_bridge_node" name="arm_nt4_bridge" output="screen">
+    <env name="LD_LIBRARY_PATH"
+         value="$(arg catkin_ws)/build/arm_nt4_bridge/wpilib_ext/ntcore/linux/arm64/shared:$(arg catkin_ws)/build/arm_nt4_bridge/wpilib_ext/wpinet/linux/arm64/shared:$(arg catkin_ws)/build/arm_nt4_bridge/wpilib_ext/wpiutil/linux/arm64/shared:$(env LD_LIBRARY_PATH)" />
+    <param name="server_ip" value="$(arg server_ip)" />
+    <!-- Aim for >=100Hz for AngleDeg receive/publish path -->
+    <param name="loop_hz" value="$(arg nt_rate)" />
+    <param name="nt_periodic_s" value="0.01" />
+
+    <param name="cmd_source" value="$(arg cmd_source)" />
+    <param name="jtc_state_topic" value="/arm_controller/state" />
+    <param name="jtc_command_topic" value="/arm_controller/command" />
+    <param name="arm_hw_command_topic" value="/arm_hw/nt_command" />
+    <!-- If cmd_source=servo, read Servo's JointTrajectory output directly -->
+    <param name="servo_topic" value="/servo_server/joint_trajectory_cmd" />
+    <param name="servo_msg_type" value="trajectory" />
+
+    <!-- "b" smoothing: filter vel/acc and generate monotonic position -->
+    <param name="b_enable" value="true" />
+    <!-- Velocity clamp (rad/s) -->
+    <param name="b_vel_max" value="12.0" />
+    <!-- Acceleration clamp (rad/s^2) -->
+    <param name="b_acc_max" value="50.0" />
+    <!-- Jerk limit (rad/s^3) for S-curve: lower = smoother acceleration ramp -->
+    <!-- 1.5 = smoother deceleration when jog stops -->
+    <param name="b_jerk_max" value="12.0" />
+    <!-- 1st order LPF time constant on velocity (s) -->
+    <!-- larger = smoother but slower response -->
+    <param name="b_tau" value="0.12" />
+    <!-- Integrate filtered vel to make pos monotonic (no backward jumps) -->
+    <param name="b_use_pos_ref" value="true" />
+    <!-- If b_use_pos_ref=true, realign integrated pos to Servo pos when error exceeds this (rad) -->
+    <!-- Hard realign threshold (large = almost never triggers, only for safety) -->
+    <param name="b_pos_realign_rad" value="3.14" />
+    <!-- Soft realign rate: fraction of motion velocity allowed for realign -->
+    <!-- 0.05 = very gentle, only nudges during motion; stop后不再拉回 -->
+    <param name="b_pos_realign_rate" value="0.35" />
+    <!-- Small-change hold (rad/s) for incoming velocity after filtering.
+         If you still see tiny "pos waviness", try 0.005 ~ 0.02. -->
+    <param name="b_vel_input_hold_eps" value="0.02" />
+    <!-- Only apply the 'hold' at low speed to avoid stair-stepping at 0.5+ rad/s -->
+    <param name="b_vel_input_hold_max_vel" value="0.30" />
+    <!-- When slowing down / stopping, allow higher jerk so the tail distance is smaller -->
+    <param name="b_decel_jerk_mult" value="1.0" />
+    <!-- Optional extra smoothing on position output (s). 0 disables. -->
+    <param name="b_pos_tau" value="0.14" />
+    <!-- If loop stalls longer than this, reset smoothing states to current sample (s) -->
+    <param name="b_reset_on_dt_s" value="0.2" />
+    <!-- In jtc_state mode: use Servo's vel/acc because JTC outputs velocities=0! -->
+    <param name="b_use_servo_vel_acc" value="true" />
+
+    <param name="joint_states_topic" value="/joint_states" />
+    <param name="publish_joint_states" value="true" />
+
+    <param name="active_joint" value="Both" />
+    <param name="monitor_only" value="false" />
+    <param name="ros_timeout_s" value="$(arg ros_timeout_s)" />
+
+    <rosparam param="joint_map">
+      joint1: J1
+      joint2: J2
+      joint3: J3
+    </rosparam>
+    <!-- Servo 仍然会依赖 joint4 的存在；这里在 state topic 里补齐 -->
+    <rosparam param="extra_joints">
+      - {name: joint4, position: 0.0}
+    </rosparam>
+  </node>
+
+  <!-- RobotHW + controller_manager loop -->
+  <node pkg="arm_control" type="arm_hw_node" name="arm_hw" output="screen">
+    <param name="sim_mode" value="false" />
+    <rosparam param="joints">
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+    </rosparam>
+    <param name="state_topic" value="/arm_hw/nt_state" />
+    <param name="command_topic" value="/arm_hw/nt_command" />
+    <param name="control_rate" value="$(arg control_rate)" />
+  </node>
+
+  <!-- spawn controllers -->
+  <!-- Use a unique name to avoid collisions with any other spawner nodes in the same ROS master -->
+  <node pkg="controller_manager" type="spawner" name="arm_control_spawner"
+        args="joint_state_controller arm_controller" output="screen"/>
+</launch>

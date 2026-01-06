@@ -1,0 +1,76 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+  <!-- IMPORTANT: /joint_states 必须只有一个发布者。若你改用 arm_nt4_bridge(=NT4) 来发布 /joint_states，
+       请把这个参数设为 false：publish_joint_states:=false -->
+  <arg name="publish_joint_states" default="true" />
+
+  <!-- 1) Publish /joint_states from RoboRIO feedback (AngleDeg -> rad) -->
+  <node if="$(arg publish_joint_states)"
+        pkg="arm_nt_bridge" type="nt_angles_to_joint_states.py"
+        name="nt_angles_to_joint_states" output="screen">
+    <param name="server_ip" value="$(arg server_ip)" />
+    <param name="joint_states_topic" value="/joint_states" />
+    <param name="rate" value="50.0" />
+    <rosparam param="joint_map">
+      joint1: J1
+      joint2: J2
+      joint3: J3
+    </rosparam>
+    <!-- SRDF 中 joint4 是 passive，但 Servo 仍要求它出现在 /joint_states；这里用固定 0rad 补齐 -->
+    <rosparam param="extra_joints">
+      - {name: joint4, position: 0.0}
+    </rosparam>
+  </node>
+
+  <!-- 2) Robot description + move_group (Servo needs robot model + planning scene monitor) -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="false" output="screen" />
+
+  <include file="$(find robotics_arm_moveit_config)/launch/move_group.launch">
+    <arg name="load_robot_description" value="true" />
+    <!-- 设为 true + fake controller manager，避免 move_group 因缺少 moveit_controller_manager 参数而直接 FATAL 退出 -->
+    <arg name="allow_trajectory_execution" value="true" />
+    <arg name="moveit_controller_manager" value="fake" />
+    <arg name="fake_execution_type" value="interpolate" />
+    <arg name="pipeline" value="ompl" />
+    <arg name="info" value="true" />
+  </include>
+
+  <!-- 3) MoveIt Servo server -->
+  <node pkg="moveit_servo" type="servo_server" name="servo_server" output="screen">
+    <rosparam command="load" file="$(find robotics_arm_moveit_config)/config/servo.yaml" />
+  </node>
+
+  <!-- 4) Bridge Servo Float64MultiArray -> NetworkTables ROS setpoint keys -->
+  <node pkg="arm_nt_bridge" type="moveit_servo_array_to_nt.py" name="servo_array_to_nt" output="screen">
+    <param name="server_ip" value="$(arg server_ip)" />
+    <param name="servo_topic" value="/servo/joint_position_cmd" />
+
+    <!-- Root keys -->
+    <param name="active_joint" value="Both" />
+    <!-- Real control: must be false, otherwise RoboRIO will force 0V output -->
+    <param name="monitor_only" value="false" />
+
+    <!-- Watchdog timeout on RoboRIO side -->
+    <param name="ros_timeout_s" value="0.15" />
+
+    <!-- Ensure we keep writing to NT continuously (watchdog), even if Servo output pauses -->
+    <param name="nt_write_rate" value="50.0" />
+
+    <!-- Joint order must match MoveIt group joint order (arm). joint4 is passive and ignored by joint_map. -->
+    <rosparam param="joint_order">
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+    </rosparam>
+
+    <!-- Joint mapping (ROS joint -> NT subtable) -->
+    <rosparam param="joint_map">
+      joint1: J1
+      joint2: J2
+      joint3: J3
+    </rosparam>
+  </node>
+</launch>
+
+

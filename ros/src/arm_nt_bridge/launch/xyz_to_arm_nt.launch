@@ -1,0 +1,26 @@
+<launch>
+  <!-- RoboRIO NetworkTables server IP -->
+  <arg name="server_ip" default="10.1.14.2" />
+
+  <!-- Input xyz topic -->
+  <arg name="xyz_topic" default="/arm_xyz_goal" />
+
+  <!-- Planning group / link -->
+  <arg name="group_name" default="arm" />
+  <arg name="ik_link" default="J5_1" />
+
+  <!-- If your goal points are already in world, keep default -->
+  <arg name="planning_frame" default="world" />
+
+  <node pkg="arm_nt_bridge" type="xyz_to_arm_nt.py" name="xyz_to_arm_nt" output="screen">
+    <param name="server_ip" value="$(arg server_ip)" />
+    <param name="xyz_topic" value="$(arg xyz_topic)" />
+    <param name="group_name" value="$(arg group_name)" />
+    <param name="ik_link" value="$(arg ik_link)" />
+    <param name="planning_frame" value="$(arg planning_frame)" />
+    <param name="active_joint" value="Both" />
+  </node>
+</launch>
+
+
+

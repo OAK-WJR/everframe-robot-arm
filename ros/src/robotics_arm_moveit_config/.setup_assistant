@@ -1,0 +1,11 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: robotics_arm_urdf
+    relative_path: urdf/very.xacro
+    xacro_args: ""
+  SRDF:
+    relative_path: config/very.srdf
+  CONFIG:
+    author_name: Jiarui Wu
+    author_email: OAK-WJR@users.noreply.github.com
+    generated_timestamp: 1767238982

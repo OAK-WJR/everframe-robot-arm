@@ -1,0 +1,47 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+  <arg name="joint_states_topic" default="/joint_states" />
+
+  <!--
+    机械臂关节反馈（NetworkTables -> sensor_msgs/JointState）
+
+    关键建议：
+    - 发布到 /joint_states 时，请确保系统里没有其它节点也在发布 /joint_states（否则会冲突）。
+    - 若用于 MoveIt/URDF 的真实关节状态，通常优先使用 AngleDeg（本关节测量角）。
+  -->
+  <node pkg="arm_nt_bridge" type="nt_angles_to_joint_states.py" name="nt_angles_to_joint_states" output="screen">
+    <param name="server_ip" value="$(arg server_ip)" />
+    <param name="joint_states_topic" value="$(arg joint_states_topic)" />
+    <param name="rate" value="50.0" />
+
+    <!-- 将 ROS joint name 映射到 NetworkTables 子表名：Arm/Jx/... -->
+    <!-- TODO: 把 joint1..joint4 改成你 URDF/MoveIt 里的真实关节名 -->
+    <rosparam param="joint_map">
+      joint1: J1
+      joint2: J2
+      joint3: J3
+      joint4: J4
+    </rosparam>
+
+    <!-- 标定：deg_in = (deg_out - offset_deg) / sign -->
+    <!--
+    <rosparam param="joint_sign">
+      joint1: 1.0
+      joint2: 1.0
+      joint3: 1.0
+      joint4: 1.0
+    </rosparam>
+    <rosparam param="joint_offset_deg">
+      joint1: 0.0
+      joint2: 0.0
+      joint3: 0.0
+      joint4: 0.0
+    </rosparam>
+    -->
+
+    <!-- 若角度是 0..360 或 -180..180 且需要连续角，可开启 -->
+    <param name="unwrap" value="false" />
+  </node>
+</launch>
+
+

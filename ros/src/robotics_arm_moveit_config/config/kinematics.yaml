@@ -1,0 +1,13 @@
+arm:
+  kinematics_solver: trac_ik_kinematics_plugin/TRAC_IKKinematicsPlugin
+  # TRAC-IK 更容易出解；solve_type 推荐先用 Speed
+  solve_type: Speed
+  # Demo：只关注末端位置(xyz)，不强制末端姿态
+  # 这样在 RViz 里拖动位置时更容易出解（对 4DOF 机械臂尤其重要）
+  position_only_ik: true
+  kinematics_solver_search_resolution: 0.005
+  kinematics_solver_timeout: 0.05
+  goal_joint_tolerance: 0.0001
+  goal_position_tolerance: 0.0001
+  # 即便将来关闭 position_only_ik，也把姿态容差放宽（单位：rad）
+  goal_orientation_tolerance: 3.1416

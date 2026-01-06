@@ -1,0 +1,44 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+  <!-- mode:
+       - plan:  松开鼠标后用 MoveIt 规划一条轨迹，再按轨迹采样下发 TargetDeg（更平滑，适合跟随）
+       - direct:松开鼠标后只算一次 IK，下发单点 TargetDeg（最简单） -->
+  <arg name="mode" default="plan" />
+
+  <!-- 只要你启动了 MoveIt demo 的 RViz(MotionPlanning)，就会有这个 feedback topic -->
+  <arg name="feedback_topic" default="/rviz_moveit_motion_planning_display/robot_interaction_interactive_marker_topic/feedback" />
+
+  <!-- 方案 1：规划轨迹并采样下发（推荐） -->
+  <node if="$(eval arg('mode') == 'plan')" pkg="arm_nt_bridge" type="moveit_plan_to_arm_nt.py" name="moveit_plan_to_arm_nt" output="screen">
+    <param name="server_ip" value="$(arg server_ip)" />
+    <param name="feedback_topic" value="$(arg feedback_topic)" />
+    <param name="planning_frame" value="world" />
+    <param name="group_name" value="arm" />
+    <param name="ik_link" value="J5_1" />
+    <param name="active_joint" value="Both" />
+    <param name="trigger_event" value="mouse_up" />
+    <param name="planning_time" value="2.0" />
+    <param name="planning_attempts" value="5" />
+    <param name="velocity_scaling" value="0.2" />
+    <param name="acceleration_scaling" value="0.2" />
+    <param name="sample_rate" value="50.0" />
+  </node>
+
+  <!-- 方案 2：单点 IK 下发（保留） -->
+  <node if="$(eval arg('mode') == 'direct')" pkg="arm_nt_bridge" type="moveit_marker_feedback_to_arm_nt.py" name="moveit_marker_feedback_to_arm_nt" output="screen">
+    <param name="server_ip" value="$(arg server_ip)" />
+    <param name="feedback_topic" value="$(arg feedback_topic)" />
+    <param name="planning_frame" value="world" />
+    <param name="group_name" value="arm" />
+    <param name="ik_link" value="J5_1" />
+    <param name="active_joint" value="Both" />
+    <param name="trigger_event" value="mouse_up" />
+    <!-- direct 模式默认也启用平滑（避免“卡卡的/乱晃”） -->
+    <param name="slew_rate_deg_per_s" value="60.0" />
+    <param name="send_rate" value="50.0" />
+  </node>
+</launch>
+
+
+
+
