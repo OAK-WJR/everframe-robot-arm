@@ -1,3 +1,23 @@
+# macOS
 **/.DS_Store
 .DS_Store
 ._*
+
+# CAD program temp/backup files
+*.f3d.bak
+~$*
+*.tmp
+
+# Raw videos stay out of the repo (link them instead)
+*.mov
+*.mp4
+*.m4v
+
+# Never commit secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Python
+__pycache__/

@@ -1,149 +1,126 @@
-# frc114-harmonic-drive
+# Harmonic-Drive Joint CAD
 
-[![License: CERN-OHL-S-2.0](https://img.shields.io/badge/License-CERN--OHL--S--2.0-blue.svg)](./LICENSE)
-[**🔎 Search (filename)**](https://github.com/OAK-WJR/frc114-harmonic-drive/find/main) · [**📘 Docs**](#old-docs-server-removed)
-
-> Built for FRC robotics: a modular library of **harmonic reducers**, motor-side **adapters**, and **universal joints** (vertical).  
-> Repository accepts **`.step` only** (mm, Z↑). *(Legacy non-STEP files will be migrated.)*
+CAD for the harmonic-drive robot joints I designed: motor-side **adapters** and output-side **joints** that bolt together through one fixed interface, so I can change the motor or the joint without redrawing the other side. The D25 vertical joint in this repo is joint J2 (and J1) of my EverFrame robot arm: a 100:1 D25 harmonic reducer driven by a REV NEO Vortex. I sorted the parts into this library in September 2025, while I was on FRC Team 114. In 2026 I used a harmonic reducer again, on the team's intake pivot (see below); that pivot was drawn separately in the team's CAD and is not part of this library.
 
 <p align="center">
-  <img src="docs/real-pictures/real-joint-D25_vertical_top.png" width="49%" alt="Real assembly - D25 vertical (top view)"/>
-  <img src="docs/design-example/pictures/joint-D25_vertical_main.png" width="49%" alt="D25 vertical joint - main render"/>
+  <img src="docs/real-pictures/real-joint-D25_vertical_top.png" width="45%" alt="The built D25 joint: NEO Vortex motor on a harmonic reducer, on a square tube"/>
+  <img src="docs/design-example/pictures/joint-D25_vertical_main.png" width="45%" alt="CAD of the D25 vertical joint"/>
 </p>
+<p align="center"><i>Left: the built D25 joint, Sep 2025. Right: the same joint in CAD (Fusion 360).</i></p>
 
----
+## Demo
 
-## Definitions
+| Arm joint J2 (Sep 2, 2025) | FRC 114 intake pivot (Feb 7, 2026) |
+|---|---|
+| <img src="docs/demo/j2-lifts-bag_2025-09-02.gif" width="100%" alt="J2 lifts a bag on a long rod"/> | <img src="docs/demo/intake-pivot-test_2026-02-07.gif" width="100%" alt="Intake moving down and up on the team robot"/> |
+| J2, built from this design, lifts a bag on a long rod to about 70°. Sped up 4x. | The harmonic-drive intake pivot moving the intake down and up on the team's robot during the one-hour test. Sped up. |
 
-- **Adapter** — the **motor-side connection module**.  
-  Provides the motor interface (mounting pattern, pilot, flange) so a specific motor (NEO, Kraken, Falcon, etc.) can mount to the reducer. An adapter may be a flange + connector set, or an **integrated module** that also includes the motor.
+Clips from both are in my MIT Maker Portfolio video (EverFrame arm and FRC 114 chapters). Raw videos are not stored in this repo.
 
-- **Joint** — the **output-side connection module**.  
-  Links the reducer to the rest of the mechanism, offered in **vertical** (straight-through) or **parallel** (offset) orientations.
+## How it works
 
-- **AJI (Adapter–Joint Interface)** — the **fixed interface standard** between adapters and joints.  
-  Geometry is **frozen** (pilot, bolt circle, hole size/count, face thickness, datum, etc.), so **every adapter in a series (e.g., D25) mates with every joint of the same series**. The frozen zone is shown in **blue** in the reference drawings.
-
----
-
-## Why this repo
-
-- **Benefits of harmonic drives**
-  - **Zero/near-zero backlash** *(typical accuracy ≤ 1 arc-min ≈ 0.0167° ≈ 0.000291 rad)*  
-  - **Lightweight** *(all D-series < 1 kg; D17 as low as ~0.41 kg)*  
-  - **High ratios** *(e.g., 100:1)*  
-  - **Compact** *(Ø ~80–142 mm; depth ~18.5–27.9 mm)*  
-  - **High torque capacity** *(typical ~90 N·m ≈ 9 kg @ 1 m; some sizes up to ~892 N·m ≈ 90.9 kg @ 1 m)*
-
-- **One interface per model (AJI)**  
-  For each reducer size (e.g., **D25**), **all adapters** (motor-side modules) and **all joints** (output-side modules) share the **same AJI**.  
-  → You can swap a motor (**change adapter**) or swap the joint orientation (**change joint**) **without redesigning the other side**.
-
-- **Swap-friendly & consistent exports**  
-  Hot-swap motors/joints within a model series; export is standardized to **`.step`** for maximum CAD interoperability.
-
----
-
-## Quick access
-
-- **Browse by directory**
-  - Reducers: [`mechanical/base_reducers/`](https://github.com/OAK-WJR/frc114-harmonic-drive/tree/main/mechanical/base_reducers)
-  - Adapters: [`D17`](https://github.com/OAK-WJR/frc114-harmonic-drive/tree/main/mechanical/adapters/D17) · [`D20`](https://github.com/OAK-WJR/frc114-harmonic-drive/tree/main/mechanical/adapters/D20) · [`D25`](https://github.com/OAK-WJR/frc114-harmonic-drive/tree/main/mechanical/adapters/D25) · [`J32`](https://github.com/OAK-WJR/frc114-harmonic-drive/tree/main/mechanical/adapters/J32)
-  - Joints: [`mechanical/joints/`](https://github.com/OAK-WJR/frc114-harmonic-drive/tree/main/mechanical/joints)
-- **Filename search** (works for binaries):  
-  → https://github.com/OAK-WJR/frc114-harmonic-drive/find/main  
-  Try: `D25-vertical` · `NEOVertex` · `KrakenX60`
-
----
-
-## What’s inside
-
-```text
-mechanical/
-  base_reducers/                # reducers only (.step)
-  adapters/                     # <Series>/<...MOTOR...>.step
-  joints/                       # <Series>-vertical.step
-docs/
-  design-example/
-    D25-MotorBoardAdapter_example-design_reference.step
-    pictures/                   # images used in README
-  real-pictures/                # real assembly photos
-LICENSE
+```
+ motor (NEO Vortex / Kraken X60)
+   |  motor plate + shaft sleeve        <- ADAPTER (motor side)
+   v
+ harmonic reducer (D25, 100:1)
+   |  fixed bolt pattern and pilot      <- the shared interface ("AJI")
+   v
+ output plates, gussets, arm mount      <- JOINT (output side)
+   |
+   v
+ arm link / tube
 ```
 
-**Supported models (now)**: `D17 · D20 · D25 · J32`  
-**Example**: `mechanical/joints/D25-vertical.step`
-
----
-
-## Naming (short)
-
-- **Reducers**: `<Series><Frame>[-<Ratio>].step` → `D25-24.step`, `J32.step`  
-- **Adapters**: `adapters/<Series>/<Series>-<MOTOR>-<vN>[-<Mount>].step`  
-  - `MOTOR` UPPERCASE recommended: `NEOVERTEX | KRAKENX60 | ...`  
-  - `vN`: `v1/v2/v5...`; `Mount` (optional): `P | NT | NF`  
-- **Joints**: `joints/<Series>-vertical.step`
-
-Full rules → **Docs**: #old-docs-server-removed
-
----
-
-## Universal Joint Design Requirements
-> **Note**: interchangeability is **within the same series only** (e.g., D25 ↔ D25).  
-> Different series and frames (e.g. D17 vs. D20, D25 vs. J32) do **not** mate directly.
-**Goal**: joints must be **modular and hot-swappable** so you can change motors (adapter side) or joint orientation **without** redesign.
-- **AJI-compatible (frozen)**  
-  Use the series’ **AJI** exactly as defined (pilot, bolt-circle, holes, face thickness, datum). **Do not modify the blue “frozen” zone** in the reference drawings.
-- **Fits all adapters of the same series**  
-  A joint for **D25** must assemble with **every D25 adapter** (NEO/NEOVERTEX/KRAKEN… all versions).
-- **Must fit the reference adapter first**  
-  Validate against the reference adapter file before anything else:  
-  `docs/design-example/D25-MotorBoardAdapter_example-design_reference.step`
-- **Orientation variants**  
-  Joints come in **vertical** (straight-through) and **parallel** (offset). The AJI side is identical; only the output geometry changes.
-- **Keep it modular**  
-  No custom features on the AJI face. Reinforcements, cable channels, guards, etc. are allowed **outside** the frozen zone.
-- **Clearances & fasteners**  
-  Leave tool access for screws; respect min edge distance; avoid interference with typical motor housings and adapter bosses.
-- **Envelope (recommended)**  
-  Stay within a reasonable OD/height so different joints won’t collide with typical frames. Document any special clearance.
-- **Export**  
-  `.step` only (mm, Z↑).
-
-**Acceptance checklist**
-1) Mates with **reference adapter** (no interference).  
-2) Mates with **all adapters** in the same series.  
-3) Tool clearance OK; screws seat fully.  
-4) No geometry in the **frozen** AJI zone.  
-5) File name & path follow the **Naming** rules.
-
----
-
-## Contributing / Requirements
-
-1. Export **`.step`** only (mm, Z↑).  
-2. Follow **Naming** & folder layout.  
-3. **AJI compliance**: do **not** change the blue frozen AJI zone.  
-4. **Universal joint-specific**:  
-   - Must fit the **reference adapter** of the same series.  
-   - Must fit **all adapters** of the same series (hot-swap guarantee).  
-   - Keep design **modular**; no custom features on the AJI face.  
-5. (Optional) update **`config/variants.csv`** (see below).  
-6. Submit PR with 1–2 screenshots (one assembly with an adapter).
+- **Adapter**: holds one motor model on the reducer input. Each motor gets its own adapter.
+- **Joint**: connects the reducer output to the rest of the mechanism.
+- **Interface (AJI, "adapter-joint interface")**: the pilot, bolt circle, hole size and count, and face thickness are kept the same for every adapter and joint of one reducer size. The fixed area is shown in blue on the reference adapter below. Parts only mate within one size (D25 with D25).
 
 <p align="center">
-  <img src="docs/design-example/pictures/D25-MotorBoardAdapter_back-design_reference.png" width="49%" alt="D25 adapter - back (blue: AJI frozen)"/>
-  <img src="docs/design-example/pictures/D25-MotorBoardAdapter_front-design_reference.png" width="49%" alt="D25 adapter - front"/>
+  <img src="docs/design-example/pictures/D25-MotorBoardAdapter_back-design_reference.png" width="40%" alt="Reference adapter, back; blue = fixed interface"/>
+  <img src="docs/design-example/pictures/D25-MotorBoardAdapter_front-design_reference.png" width="40%" alt="Reference adapter, front"/>
 </p>
-<p align="center"><i>Blue area = AJI mating & datum zone (FROZEN · do not modify).</i></p>
+<p align="center"><i>The D25 reference adapter. Blue = the fixed interface that every D25 adapter and joint keeps.</i></p>
 
----
+## What is in this repo
 
-## License & attribution
+```
+mechanical/
+  adapters/D25/
+    D25-NEOVertex-v5-P.step     # adapter for the REV NEO Vortex (+ SPARK Flex); this is the one I built
+    D25-KrakenX60-v1-NT.step    # adapter for the Kraken X60 (CAD only)
+  joints/
+    D25-vertical.step           # the J1/J2 joint of my arm, with motor, reducer and output plates
+docs/
+  design-example/
+    D25-MotorBoardAdapter_example-design_reference.step   # reference adapter: the interface to design against
+    pictures/                   # CAD views
+  real-pictures/                # photo of the built joint
+  demo/                         # the two GIFs above
+  frc114-intake-pivot/          # photos of the intake pivot
+tools/
+  step_info.py                  # lists the header and every part name inside a STEP file
+LICENSE                         # CERN-OHL-S-2.0
+```
 
-© 2025 Jiarui Wu — Licensed under **CERN-OHL-S v2.0** (see `LICENSE`).  
-Vendor “reference-only” models are **not** redistributed; use vendor links locally.
+File names: `<reducer size>-<motor>-v<version>-<mount option>.step` for adapters, `<reducer size>-vertical.step` for joints. All files are STEP (mm, Z up). "NEOVertex" in the file names means the REV NEO Vortex.
 
+## How to open and build it
 
+**Open the CAD.** Any CAD program that reads STEP works (I used Fusion 360: *File > Open > Open from my computer*). The adapter and joint files are about 32 MB each because they include the vendor reducer, motor and controller models.
 
+**See what is inside a file without CAD** (Python 3, no extra packages):
 
+```bash
+git clone https://github.com/OAK-WJR/JerryWu.git
+cd JerryWu
+python3 tools/step_info.py mechanical/joints/D25-vertical.step
+python3 tools/step_info.py mechanical/adapters/D25/*.step
+```
+
+This prints the export time and every part name, which is also how you can tell my parts from vendor parts (see Credits).
+
+**Hardware for the D25 + NEO Vortex joint** (what the CAD contains):
+- D25 harmonic reducer, 100:1
+- REV NEO Vortex (REV-21-1652) and SPARK Flex (REV-11-2159)
+- 17 mm ID x 30 mm OD bearing, external retaining ring, M3 flat-head screws, 10-32 x 1/2" bolts for the motor
+- my parts from the CAD: shaft sleeve (5 x 3.2 x 4 mm), shaft positioner (`ShaftPos8-24`), motor plate and output plates. I 3D-printed parts of the first J2; some later arm parts were machined from aluminum by an outside shop.
+
+## FRC Team 114: harmonic-drive intake pivot (Jan–Feb 2026)
+
+For the team's 2026 intake, I suggested a harmonic reducer for the pivot and designed its connection to the intake plate. I tested a wooden plate on the reducer first. A printed flange cracked at its shaft key and a replacement also failed, so I drilled mounting holes in a metal flange. In an hour-long pivot test on the team's robot, the structure held but the NEO motor overheated. The intake's hopper also got in the way of other mechanisms, so the team used a four-bar intake for competition. I also gave the team default control gains from my arm's harmonic-drive joint, which went into the team code's README on Jan 20, 2026.
+
+<p align="center">
+  <img src="docs/frc114-intake-pivot/2026-01-18_wood-test-plate-on-reducer.jpg" height="220" alt="Wood test plate on the reducer"/>
+  <img src="docs/frc114-intake-pivot/2026-01-31_on-robot-printed-flange.jpg" height="220" alt="Pivot on the robot with a printed flange"/>
+  <img src="docs/frc114-intake-pivot/2026-02-06_metal-flange-fitted.jpg" height="220" alt="Metal flange fitted"/>
+</p>
+<p align="center"><i>Jan 18: wood test plate on the reducer. Jan 31: on the robot with a printed flange (black, center). Feb 6: the metal flange fitted.</i></p>
+
+The pivot-plate CAD lives in the team's Onshape document and belongs to the team, and the robot code belongs to the team, so neither is in this repo.
+
+## Results and limits
+
+- **Built and working:** the D25 + NEO Vortex joint. On Sep 2, 2025 the J2 joint lifted a bag on a long rod to about 70° (GIF above), and the same design is used for J1 and J2 of my arm.
+- **Fixed during the build:** the reducer sleeve was first drawn 5 x 3 x 4 mm and was too tight on the M3 screw, so I changed it to 5 x 3.2 x 4 mm. Both versions are still in the CAD.
+- **CAD only:** the Kraken X60 adapter (no build record). I have not tested swapping adapters on real hardware, so "every D25 adapter fits every D25 joint" is a design rule, not a tested result.
+- **Not made yet:** parallel (offset) joints and adapters for other reducer sizes.
+- **Interface not dimensioned:** the fixed interface is defined by the reference adapter file and the blue area in its pictures; there is no drawing with tolerances.
+- **The STEP files are not parametric.** Changing a size means editing the original Fusion 360 design.
+- **Intake pivot:** the structure survived the one-hour test, but the motor overheated and the team did not use this intake in competition.
+
+## Credits
+
+**My work (Jerry / Jiarui Wu).** The idea to split each joint into a motor-side adapter and an output-side joint with one fixed interface; the CAD of my own parts in Fusion 360 (named `MotorBoard-*`, `D25-*`, `ShaftPos8-24`, the sleeves and spacers, and the `J1J2…` / `J2…` plates, gusset and arm mount in `D25-vertical.step`); the reference adapter; building and testing the J2 joint. For the intake pivot: suggesting the harmonic drive, designing its connection to the intake plate, the wood-plate test, drilling the metal flange and running the test.
+
+**AI tools.** Claude Code (Nov 2026), at my request: rewrote this README from my notes and portfolio, removed vendor-only model files from this branch, wrote `tools/step_info.py`, and made the two GIFs from my videos. No AI tool drew the CAD. For the intake pivot, ChatGPT made a motor-sizing table (Jan 16, 2026) and gave a CAM warning (Jan 26, 2026).
+<!-- TODO(Jerry): (1) say whether an AI chat tool helped write the Sept 2025 README text; (2) confirm the ChatGPT motor-sizing table (Jan 16) and CAM warning (Jan 26) were really ChatGPT; then delete this comment. -->
+
+**Vendor models and other people.**
+- The assemblies include vendor CAD placed for fit, which belongs to its makers and is **not** covered by this repo's licence: the D25 harmonic reducer model from the reducer supplier; REV Robotics models (part numbers `REV-…`, including the NEO Vortex and SPARK Flex with their connector models); WCP models (`WCP-…`) for the Kraken X60; McMaster-Carr hardware models; and a catalog gusset model (`ZGB13-W40-H60-T10`) that my J2 gussets are based on. Bare vendor reducer models are not in this branch; get them from the supplier.
+- FRC Team 114 built the team robot and the competition four-bar intake. Two teammates sketched an earlier gear-driven pivot, one teammate printed the second flange, and other teammates wrote and tuned the intake code.
+- An outside machine shop machined some later aluminum arm plates from my STEP files.
+
+## License
+
+My own parts are licensed under **CERN-OHL-S-2.0** (see `LICENSE`). © 2025 Jiarui Wu. Vendor models inside the assemblies stay under their makers' terms.
