@@ -1,0 +1,37 @@
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# WPILib / Gradle (roborio/)
+roborio/build/
+roborio/bin/
+roborio/.gradle/
+roborio/gradle.properties
+networktables.json
+simgui*.json
+*.wpilog
+
+# ROS catkin workspace (ros/)
+ros/build/
+ros/devel/
+ros/install/
+ros/src/CMakeLists.txt
+.catkin_workspace
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv_*/
+
+# Node
+node_modules/
+
+# Secrets and large files never belong here
+.env
+.env.*
+*.zip
+*.mov
+*.mp4
