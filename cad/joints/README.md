@@ -72,8 +72,8 @@ File names: `<reducer size>-<motor>-v<version>-<mount option>.step` for adapters
 **See what is inside a file without CAD** (Python 3, no extra packages):
 
 ```bash
-git clone https://github.com/OAK-WJR/JerryWu.git
-cd JerryWu
+git clone https://github.com/OAK-WJR/harmonic-drive-joints.git
+cd harmonic-drive-joints
 python3 tools/step_info.py mechanical/joints/D25-vertical.step
 python3 tools/step_info.py mechanical/adapters/D25/*.step
 ```
