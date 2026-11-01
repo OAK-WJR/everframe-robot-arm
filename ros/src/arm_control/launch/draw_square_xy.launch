@@ -1,0 +1,30 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+  <arg name="control_rate" default="100.0" />
+  <arg name="nt_rate" default="100.0" />
+  <arg name="ros_timeout_s" default="0.25" />
+  <arg name="catkin_ws" default="$(optenv CATKIN_WS /home/jetson/catkin_ws)" />
+
+  <!-- 1) ros_control + JTC + NT4 bridge（真实硬件） -->
+  <include file="$(find arm_control)/launch/jtc_nt4.launch">
+    <arg name="server_ip" value="$(arg server_ip)" />
+    <arg name="control_rate" value="$(arg control_rate)" />
+    <arg name="nt_rate" value="$(arg nt_rate)" />
+    <arg name="ros_timeout_s" value="$(arg ros_timeout_s)" />
+    <arg name="catkin_ws" value="$(arg catkin_ws)" />
+  </include>
+
+  <!-- 2) TF from joint_states -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="false" output="screen" />
+
+  <!-- 3) move_group：用 simple controller manager 走 arm_controller/follow_joint_trajectory -->
+  <include file="$(find robotics_arm_moveit_config)/launch/move_group.launch">
+    <arg name="load_robot_description" value="false" />
+    <arg name="allow_trajectory_execution" value="true" />
+    <arg name="moveit_controller_manager" value="simple" />
+    <arg name="pipeline" value="ompl" />
+    <arg name="info" value="false" />
+  </include>
+</launch>
+
+

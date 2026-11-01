@@ -1,0 +1,19 @@
+<launch>
+  <arg name="in_topic" default="/servo_server/joint_trajectory_cmd" />
+  <arg name="out_topic" default="/arm_controller/command" />
+  <!-- Rolling horizon parameters for JTC:
+       horizon ~= dt_s * (points-1), shifted into the future by lead_s -->
+  <arg name="points" default="10" />
+  <arg name="dt_s" default="0.01" />
+  <arg name="lead_s" default="0.05" />
+
+  <node pkg="arm_nt_bridge" type="servo_traj_to_jtc.py" name="servo_traj_to_jtc" output="screen">
+    <param name="in_topic" value="$(arg in_topic)" />
+    <param name="out_topic" value="$(arg out_topic)" />
+    <param name="points" value="$(arg points)" />
+    <param name="dt_s" value="$(arg dt_s)" />
+    <param name="lead_s" value="$(arg lead_s)" />
+  </node>
+</launch>
+
+

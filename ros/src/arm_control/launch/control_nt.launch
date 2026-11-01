@@ -1,0 +1,55 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+
+  <!-- robot_description is required by JointTrajectoryController (joint limits/URDF parsing) -->
+  <param name="robot_description" command="xacro $(find robotics_arm_urdf)/urdf/very.xacro" />
+
+  <!-- load controller params -->
+  <rosparam file="$(find arm_control)/config/controllers.yaml" command="load"/>
+
+  <!-- NetworkTables bridge (real hardware IO) -->
+  <node pkg="arm_nt_bridge" type="nt_arm_hw_bridge.py" name="nt_arm_hw_bridge" output="screen">
+    <param name="server_ip" value="$(arg server_ip)" />
+
+    <!-- IMPORTANT:
+         MonitorOnly=true => RoboRIO outputs 0V => TargetDeg won't move the arm.
+         For "ROS sends TargetDeg and RoboRIO drives motors", set monitor_only=false. -->
+    <param name="monitor_only" value="false" />
+    <param name="active_joint" value="Both" />
+
+    <!-- Must match arm_control arm_hw joints -->
+    <rosparam param="joint_map">
+      joint1: J1
+      joint2: J2
+      joint3: J3
+    </rosparam>
+
+    <param name="state_topic" value="/arm_hw/nt_state" />
+    <param name="command_topic" value="/arm_hw/nt_command" />
+    <param name="rate" value="20.0" />
+    <!-- 写 TargetDeg 节流：20Hz + 0.05deg 死区，减少抖动/网络噪声 -->
+    <param name="min_command_period_s" value="0.05" />
+    <param name="command_deadband_deg" value="0.05" />
+  </node>
+
+  <!-- RobotHW + controller_manager loop -->
+  <node pkg="arm_control" type="arm_hw_node" name="arm_hw" output="screen">
+    <param name="sim_mode" value="false" />
+    <rosparam param="joints">
+      - joint1
+      - joint2
+      - joint3
+    </rosparam>
+    <param name="state_topic" value="/arm_hw/nt_state" />
+    <param name="command_topic" value="/arm_hw/nt_command" />
+    <!-- 降低到 20Hz（50ms）进一步减少目标刷新/抖动（代价：响应更慢） -->
+    <param name="control_rate" value="20.0" />
+  </node>
+
+  <!-- spawn controllers -->
+  <node pkg="controller_manager" type="spawner" name="spawner"
+        args="joint_state_controller arm_controller" output="screen"/>
+</launch>
+
+
+

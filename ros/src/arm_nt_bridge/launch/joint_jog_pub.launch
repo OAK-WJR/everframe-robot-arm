@@ -1,0 +1,31 @@
+<launch>
+  <!--
+    Publish JointJog with header.stamp refreshed every cycle (avoid stale commands).
+
+    Default topic matches servo.yaml:
+      /servo_server/delta_joint_cmds  (control_msgs/JointJog)
+  -->
+
+  <arg name="topic" default="/servo_server/delta_joint_cmds" />
+  <arg name="rate" default="50.0" />
+  <arg name="frame_id" default="base_link" />
+
+  <!-- Quick use: joint:=joint2 vel:=0.2 run_for_s:=5 -->
+  <arg name="joint" default="joint2" />
+  <arg name="vel" default="0.2" />
+  <arg name="run_for_s" default="0.0" />
+
+  <node pkg="arm_nt_bridge" type="joint_jog_pub.py" name="joint_jog_pub" output="screen">
+    <param name="topic" value="$(arg topic)" />
+    <param name="rate" value="$(arg rate)" />
+    <param name="frame_id" value="$(arg frame_id)" />
+    <!-- NOTE: roslaunch does NOT substitute $(arg ...) inside <rosparam> bodies.
+         So we pass scalars and let the python node build arrays. -->
+    <param name="joint" value="$(arg joint)" />
+    <param name="vel" value="$(arg vel)" />
+    <param name="run_for_s" value="$(arg run_for_s)" />
+    <param name="publish_zero_on_exit" value="true" />
+  </node>
+</launch>
+
+

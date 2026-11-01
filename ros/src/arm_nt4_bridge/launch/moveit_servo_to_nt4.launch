@@ -1,0 +1,66 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+  <!-- Note: due to Linux scheduling + MoveIt stack load, setting this higher than 50
+       helps achieve an *effective* ~50Hz+ write rate on RoboRIO. Tune as needed. -->
+  <arg name="loop_hz" default="70.0" />
+  <!-- IMPORTANT: /joint_states 必须只有一个发布者。需要禁用本 bridge 发布时设为 false。 -->
+  <arg name="publish_joint_states" default="true" />
+  <!-- Workspace root used to locate WPILib .so (ntcore/wpinet/wpiutil) extracted under build/.
+       Set env CATKIN_WS inside container if your workspace is not /home/jetson/catkin_ws. -->
+  <arg name="catkin_ws" default="$(optenv CATKIN_WS /home/jetson/catkin_ws)" />
+  <!-- RoboRIO watchdog timeout. If Jetson occasionally drops frames under load, 0.15s can cause stop-go. -->
+  <arg name="ros_timeout_s" default="0.25" />
+
+  <!-- 1) Robot description + move_group (Servo needs robot model + planning scene monitor) -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="false" output="screen" />
+
+  <include file="$(find robotics_arm_moveit_config)/launch/move_group.launch">
+    <arg name="load_robot_description" value="true" />
+    <arg name="allow_trajectory_execution" value="true" />
+    <arg name="moveit_controller_manager" value="fake" />
+    <arg name="fake_execution_type" value="interpolate" />
+    <arg name="pipeline" value="ompl" />
+    <arg name="info" value="true" />
+  </include>
+
+  <!-- 2) MoveIt Servo server -->
+  <node pkg="moveit_servo" type="servo_server" name="servo_server" output="screen">
+    <rosparam command="load" file="$(find robotics_arm_moveit_config)/config/servo.yaml" />
+  </node>
+
+  <!-- 3) C++ NT4 bridge: Servo -> NT4 Ros* AND NT4 AngleDeg -> /joint_states -->
+  <node pkg="arm_nt4_bridge" type="arm_nt4_bridge_node" name="arm_nt4_bridge" output="screen">
+    <!-- WPILib ntcore/wpinet/wpiutil are downloaded into the catkin build tree.
+         Set LD_LIBRARY_PATH so libntcore can find its transitive deps (libwpinet/libwpiutil). -->
+    <env name="LD_LIBRARY_PATH"
+         value="$(arg catkin_ws)/build/arm_nt4_bridge/wpilib_ext/ntcore/linux/arm64/shared:$(arg catkin_ws)/build/arm_nt4_bridge/wpilib_ext/wpinet/linux/arm64/shared:$(arg catkin_ws)/build/arm_nt4_bridge/wpilib_ext/wpiutil/linux/arm64/shared:$(env LD_LIBRARY_PATH)" />
+    <param name="server_ip" value="$(arg server_ip)" />
+    <param name="loop_hz" value="$(arg loop_hz)" />
+    <param name="nt_periodic_s" value="0.01" />
+    <!-- Consume Servo output from the real servo_server namespace to avoid topic collisions -->
+    <param name="servo_topic" value="/servo_server/joint_trajectory_cmd" />
+    <param name="servo_msg_type" value="trajectory" />
+    <param name="joint_states_topic" value="/joint_states" />
+    <param name="publish_joint_states" value="$(arg publish_joint_states)" />
+    <param name="active_joint" value="Both" />
+    <param name="monitor_only" value="false" />
+    <param name="ros_timeout_s" value="$(arg ros_timeout_s)" />
+    <rosparam param="joint_order">
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+    </rosparam>
+    <rosparam param="joint_map">
+      joint1: J1
+      joint2: J2
+      joint3: J3
+    </rosparam>
+    <!-- Servo 要求 joint4 在 /joint_states 中出现，这里用固定 0rad 补齐 -->
+    <rosparam param="extra_joints">
+      - {name: joint4, position: 0.0}
+    </rosparam>
+  </node>
+</launch>
+
+

@@ -1,0 +1,46 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+  <arg name="control_rate" default="100.0" />
+  <arg name="nt_rate" default="100.0" />
+  <arg name="ros_timeout_s" default="0.25" />
+  <!-- Rolling horizon for JTC command stream (more points + smaller dt improves low-speed smoothness) -->
+  <arg name="jtc_points" default="10" />
+  <arg name="jtc_dt_s" default="0.01" />
+  <arg name="catkin_ws" default="$(optenv CATKIN_WS /home/jetson/catkin_ws)" />
+
+  <!-- Bring up ros_control + JTC + NT4 Scheme B output
+       NOTE: start this FIRST so /joint_states is available before MoveIt/Servo initialize,
+       otherwise MoveIt may error "missing joints" / "Timeout waiting for current state". -->
+  <include file="$(find arm_control)/launch/jtc_nt4.launch">
+    <arg name="server_ip" value="$(arg server_ip)" />
+    <arg name="control_rate" value="$(arg control_rate)" />
+    <arg name="nt_rate" value="$(arg nt_rate)" />
+    <arg name="ros_timeout_s" value="$(arg ros_timeout_s)" />
+    <arg name="catkin_ws" value="$(arg catkin_ws)" />
+  </include>
+
+  <!-- Bring up MoveIt + Servo (needs robot model + planning scene monitor + /joint_states) -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="false" output="screen" />
+
+  <include file="$(find robotics_arm_moveit_config)/launch/move_group.launch">
+    <arg name="load_robot_description" value="true" />
+    <arg name="allow_trajectory_execution" value="true" />
+    <arg name="moveit_controller_manager" value="simple" />
+    <arg name="pipeline" value="ompl" />
+    <arg name="info" value="true" />
+  </include>
+
+  <node pkg="moveit_servo" type="servo_server" name="servo_server" output="screen">
+    <rosparam command="load" file="$(find robotics_arm_moveit_config)/config/servo.yaml" />
+  </node>
+
+  <!-- Convert Servo's JT output into a rolling window for JTC -->
+  <include file="$(find arm_nt_bridge)/launch/servo_to_jtc.launch">
+    <arg name="in_topic" value="/servo_server/joint_trajectory_cmd" />
+    <arg name="out_topic" value="/arm_controller/command" />
+    <arg name="points" value="$(arg jtc_points)" />
+    <arg name="dt_s" value="$(arg jtc_dt_s)" />
+  </include>
+</launch>
+
+

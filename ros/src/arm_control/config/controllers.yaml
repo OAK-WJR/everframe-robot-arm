@@ -1,0 +1,23 @@
+joint_state_controller:
+  type: joint_state_controller/JointStateController
+  publish_rate: 100
+
+arm_controller:
+  type: position_controllers/JointTrajectoryController
+  joints:
+    - joint1
+    - joint2
+    - joint3
+    - joint4
+
+  # 允许只发送部分关节（例如只发 joint1~joint3），其余关节保持当前值
+  # 这对“只用 J1/J2/J3 画 XY 正方形”很关键：MoveIt 在 SRDF 中把 joint4 标成 passive，
+  # 规划轨迹通常不会包含 joint4，如果这里为 false 会导致 CONTROL_FAILED。
+  allow_partial_joints_goal: true
+  
+  state_publish_rate: 100
+  action_monitor_rate: 20
+
+  constraints:
+    goal_time: 0.5
+    stopped_velocity_tolerance: 0.02

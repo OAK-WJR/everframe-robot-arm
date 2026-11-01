@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>arm_nt_bridge</name>
+  <version>0.0.1</version>
+  <description>Bridge MoveIt IK goals (xyz) to RoboRIO NetworkTables joint targets.</description>
+
+  <maintainer email="jetson@todo.todo">jetson</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>control_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>trajectory_msgs</exec_depend>
+  <exec_depend>moveit_msgs</exec_depend>
+  <exec_depend>moveit_commander</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>tf2_geometry_msgs</exec_depend>
+  <exec_depend>interactive_markers</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+
+  <!-- NetworkTables comes from pip: pynetworktables -->
+  <export/>
+</package>
+
+
+

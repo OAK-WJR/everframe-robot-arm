@@ -1,0 +1,31 @@
+<launch>
+  <arg name="server_ip" default="10.1.14.2" />
+  <arg name="feedback_topic" default="/rviz_moveit_motion_planning_display/robot_interaction_interactive_marker_topic/feedback" />
+
+  <node pkg="arm_nt_bridge" type="moveit_plan_to_arm_nt.py" name="moveit_plan_to_arm_nt" output="screen">
+    <param name="server_ip" value="$(arg server_ip)" />
+    <param name="feedback_topic" value="$(arg feedback_topic)" />
+    <param name="planning_frame" value="world" />
+    <param name="group_name" value="arm" />
+    <param name="ik_link" value="J5_1" />
+    <param name="active_joint" value="Both" />
+
+    <!-- confirm: only plan+send when mouse released -->
+    <param name="trigger_event" value="mouse_up" />
+
+    <!-- MoveIt planning -->
+    <param name="planning_time" value="2.0" />
+    <param name="planning_attempts" value="5" />
+    <param name="velocity_scaling" value="0.2" />
+    <param name="acceleration_scaling" value="0.2" />
+
+    <!-- output sampling to roboRIO -->
+    <param name="sample_rate" value="50.0" />
+
+    <!-- optional soft limits in deg -->
+    <!-- <rosparam param="joint_min_deg">{joint1: -180}</rosparam>
+    <rosparam param="joint_max_deg">{joint1: 180}</rosparam> -->
+  </node>
+</launch>
+
+
