@@ -122,7 +122,7 @@ docs/notes_zh/             control and NetworkTables notes from development (Chi
 media/                     pictures used in this README
 ```
 
-This is a cleaned-up snapshot. The full history is in my private repos `frc2026` (folder `new/JerryRoboticsArm2`, Dec 2025 to Jan 2026) and `catkin_ws` (the Jetson workspace). The main Fusion 360 assembly is not in this repo.
+This repository keeps the real git history of the arm code: the roboRIO project from my `frc2026` repo (Dec 2025 to Jan 2026) and the ROS packages from my Jetson workspace (Jan 2026), merged, with build outputs, virtual environments, zips and logs removed from every commit. The main Fusion 360 assembly is not in this repo.
 
 ## Results and limits
 
