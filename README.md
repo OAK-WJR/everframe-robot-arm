@@ -16,7 +16,7 @@ EverFrame is my own mobile robot arm: a five-joint arm that positions a gripper,
 |---|---|
 | <img src="media/moveit_rviz_dec2025.png" width="360" alt="Arm model in MoveIt / RViz"> | <img src="media/j2_goal_vs_angle.png" width="420" alt="J2 goal vs measured angle"> |
 
-Video: the EverFrame chapter of my MIT Maker Portfolio video (submitted with the portfolio; public link to be added).
+Video: the EverFrame chapter of my MIT Maker Portfolio video (submitted with the portfolio).
 
 ## CAD
 
@@ -155,3 +155,7 @@ This repository keeps the real git history of the arm code: the roboRIO project 
 - Gradle wrapper (Apache-2.0) in `roborio/gradle/`.
 - A machine shop machined the aluminum joint parts from my STEP files.
 - No teammate code is in this repo. The arm's purchased parts (harmonic reducers, REV motors and controllers, swerve modules, lift module) and their vendor CAD are not included.
+
+## License
+
+MIT for the code and documents I or AI tools wrote (see `LICENSE`). `cad/joints/` is under CERN-OHL-S-2.0 (its own `LICENSE`); vendor models and third-party code keep their own licences, listed above.
