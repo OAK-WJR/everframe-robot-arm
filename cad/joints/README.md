@@ -1,5 +1,7 @@
 # Harmonic-Drive Joint CAD
 
+*This folder was the repository `harmonic-drive-joints`; it was merged into `everframe-robot-arm` on Nov 1, 2026, with its history. Paths below are relative to this folder.*
+
 CAD for the harmonic-drive robot joints I designed: motor-side **adapters** and output-side **joints** that bolt together through one fixed interface, so I can change the motor or the joint without redrawing the other side. The D25 vertical joint in this repo is joint J2 (and J1) of my EverFrame robot arm: a 100:1 D25 harmonic reducer driven by a REV NEO Vortex. I sorted the parts into this library in September 2025, while I was on FRC Team 114. In 2026 I used a harmonic reducer again, on the team's intake pivot (see below); that pivot was drawn separately in the team's CAD and is not part of this library.
 
 <p align="center">
@@ -12,8 +14,8 @@ CAD for the harmonic-drive robot joints I designed: motor-side **adapters** and 
 
 | Arm joint J2 (Sep 2, 2025) | FRC 114 intake pivot (Feb 7, 2026) |
 |---|---|
-| <img src="docs/demo/j2-lifts-bag_2025-09-02.gif" width="100%" alt="J2 lifts a bag on a long rod"/> | <img src="docs/demo/intake-pivot-test_2026-02-07.gif" width="100%" alt="Intake moving down and up on the team robot"/> |
-| J2, built from this design, lifts a bag on a long rod to about 70°. Sped up 4x. | The harmonic-drive intake pivot moving the intake down and up on the team's robot during the one-hour test. Sped up. |
+| <img src="docs/real-pictures/real-joint-D25_vertical_top.png" width="100%" alt="The built D25 joint (J2)"/> | <img src="docs/demo/intake-pivot-test_2026-02-07.gif" width="100%" alt="Intake moving down and up on the team robot"/> |
+| J2, built from this design, lifted a bag on a long rod to about 70° on Sep 2, 2025 (video not stored in this repo). | The harmonic-drive intake pivot moving the intake down and up on the team's robot during the one-hour test. Sped up. |
 
 Clips from both are in my MIT Maker Portfolio video (EverFrame arm and FRC 114 chapters). Raw videos are not stored in this repo.
 
@@ -72,8 +74,8 @@ File names: `<reducer size>-<motor>-v<version>-<mount option>.step` for adapters
 **See what is inside a file without CAD** (Python 3, no extra packages):
 
 ```bash
-git clone https://github.com/OAK-WJR/harmonic-drive-joints.git
-cd harmonic-drive-joints
+git clone https://github.com/OAK-WJR/everframe-robot-arm.git
+cd everframe-robot-arm/cad/joints
 python3 tools/step_info.py mechanical/joints/D25-vertical.step
 python3 tools/step_info.py mechanical/adapters/D25/*.step
 ```
@@ -114,7 +116,6 @@ The pivot-plate CAD lives in the team's Onshape document and belongs to the team
 **My work (Jerry / Jiarui Wu).** The idea to split each joint into a motor-side adapter and an output-side joint with one fixed interface; the CAD of my own parts in Fusion 360 (named `MotorBoard-*`, `D25-*`, `ShaftPos8-24`, the sleeves and spacers, and the `J1J2…` / `J2…` plates, gusset and arm mount in `D25-vertical.step`); the reference adapter; building and testing the J2 joint. For the intake pivot: suggesting the harmonic drive, designing its connection to the intake plate, the wood-plate test, drilling the metal flange and running the test.
 
 **AI tools.** Claude Code (Nov 2026), at my request: rewrote this README from my notes and portfolio, removed vendor-only model files from this branch, wrote `tools/step_info.py`, and made the two GIFs from my videos. No AI tool drew the CAD. For the intake pivot, ChatGPT made a motor-sizing table (Jan 16, 2026) and gave a CAM warning (Jan 26, 2026).
-<!-- TODO(Jerry): (1) say whether an AI chat tool helped write the Sept 2025 README text; (2) confirm the ChatGPT motor-sizing table (Jan 16) and CAM warning (Jan 26) were really ChatGPT; then delete this comment. -->
 
 **Vendor models and other people.**
 - The assemblies include vendor CAD placed for fit, which belongs to its makers and is **not** covered by this repo's licence: the D25 harmonic reducer model from the reducer supplier; REV Robotics models (part numbers `REV-…`, including the NEO Vortex and SPARK Flex with their connector models); WCP models (`WCP-…`) for the Kraken X60; McMaster-Carr hardware models; and a catalog gusset model (`ZGB13-W40-H60-T10`) that my J2 gussets are based on. Bare vendor reducer models are not in this branch; get them from the supplier.

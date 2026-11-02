@@ -18,6 +18,12 @@ EverFrame is my own mobile robot arm: a five-joint arm that positions a gripper,
 
 Video: the EverFrame chapter of my MIT Maker Portfolio video (submitted with the portfolio; public link to be added).
 
+## CAD
+
+- `cad/joints/`: the harmonic-drive joints and motor adapters I designed for this arm (and reused on FRC Team 114's intake pivot), as STEP files with their own README, pictures and CERN-OHL-S-2.0 licence. This folder was a separate repository from September 2025; its full commit history is merged here.
+- `cad/lead_arm/`: the 1:4 lead arm's joint-axis STEP generator and FeatureScript.
+- The whole-arm Fusion 360 assembly (joints, wrist, gripper, lift column and base) stays in my Fusion account; it includes vendor models that I may not redistribute. An export is available on request.
+
 ## How it works
 
 ```
