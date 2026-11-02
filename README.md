@@ -20,7 +20,12 @@ Video: the EverFrame chapter of my MIT Maker Portfolio video (submitted with the
 
 ## CAD
 
-- `cad/joints/`: the harmonic-drive joints and motor adapters I designed for this arm (and reused on FRC Team 114's intake pivot), as STEP files with their own README, pictures and CERN-OHL-S-2.0 licence. This folder was a separate repository from September 2025; its full commit history is merged here.
+- **[`cad/joints/`](cad/joints/README.md)**: the harmonic-drive joints and motor adapters I designed for this arm (J1–J3; the same design drove FRC Team 114's intake pivot), as STEP files with pictures, a parts list and a CERN-OHL-S-2.0 licence. This folder was the separate repository `harmonic-drive-joints` from September 2025; its full commit history is merged here.
+
+| The built D25 joint (J2), Sep 2025 | The same joint in CAD |
+|---|---|
+| <img src="cad/joints/docs/real-pictures/real-joint-D25_vertical_top.png" width="300" alt="Built D25 joint"> | <img src="cad/joints/docs/design-example/pictures/joint-D25_vertical_main.png" width="300" alt="D25 joint CAD"> |
+
 - `cad/lead_arm/`: the 1:4 lead arm's joint-axis STEP generator and FeatureScript.
 - The whole-arm Fusion 360 assembly (joints, wrist, gripper, lift column and base) stays in my Fusion account; it includes vendor models that I may not redistribute. An export is available on request.
 
